@@ -5,8 +5,11 @@ import { FormModal } from '@/components/ui/FormModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Upload } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Plus, Search, Upload, Download, FileText, Filter } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseExcelFile, exportToExcel, downloadExcelTemplate } from '@/utils/excelUtils';
+import { exportTableToPDF } from '@/utils/pdfUtils';
 import type { TempatPKL } from '@/types';
 
 const initialData: TempatPKL[] = [
@@ -62,18 +65,48 @@ const TempatPKLPage = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Simulate Excel import
-      toast.success('File Excel berhasil diimpor', {
-        description: file.name,
-      });
-      // In real implementation, parse Excel file here
+    if (!file) return;
+
+    try {
+      const importedData = await parseExcelFile<{ nama: string; Nama?: string }>(file);
+      const newData = importedData.map((row, index) => ({
+        id: Date.now().toString() + index,
+        nama: row.nama || row.Nama || '',
+      })).filter(item => item.nama);
+
+      setData([...data, ...newData]);
+      toast.success(`${newData.length} data berhasil diimpor dari Excel`);
+    } catch (error) {
+      toast.error('Gagal mengimpor file Excel');
     }
+
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleExportExcel = () => {
+    const exportData = data.map((item, index) => ({
+      No: index + 1,
+      'Nama Tempat PKL': item.nama,
+    }));
+    exportToExcel(exportData, 'Data_Tempat_PKL', 'Tempat PKL');
+    toast.success('Data berhasil diekspor ke Excel');
+  };
+
+  const handleExportPDF = () => {
+    const columns: { key: keyof TempatPKL; header: string }[] = [
+      { key: 'nama', header: 'Nama Tempat PKL' },
+    ];
+    exportTableToPDF(filteredData, columns, 'Data Tempat PKL', 'Tempat_PKL');
+    toast.success('Data berhasil diekspor ke PDF');
+  };
+
+  const handleDownloadTemplate = () => {
+    downloadExcelTemplate(['Nama'], 'Tempat_PKL');
+    toast.success('Template Excel berhasil diunduh');
   };
 
   const columns = [{ key: 'nama' as const, header: 'Nama Tempat PKL' }];
@@ -84,26 +117,25 @@ const TempatPKLPage = () => {
         title="Tempat PKL"
         description="Kelola data tempat Praktik Kerja Industri"
         actions={
-          <div className="flex gap-3">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".xlsx,.xls"
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              onClick={handleImportExcel}
-              className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-            >
+          <div className="flex flex-wrap gap-2">
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".xlsx,.xls" className="hidden" />
+            <Button variant="outline" onClick={handleDownloadTemplate} className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
+              <Download className="w-4 h-4 mr-2" />
+              Template
+            </Button>
+            <Button variant="outline" onClick={handleImportExcel} className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
               <Upload className="w-4 h-4 mr-2" />
               Import Excel
             </Button>
-            <Button
-              onClick={() => handleOpenModal()}
-              className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-            >
+            <Button variant="outline" onClick={handleExportExcel} className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
+              <Download className="w-4 h-4 mr-2" />
+              Export Excel
+            </Button>
+            <Button variant="outline" onClick={handleExportPDF} className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
+              <FileText className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
+            <Button onClick={() => handleOpenModal()} className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
               <Plus className="w-4 h-4 mr-2" />
               Tambah
             </Button>
@@ -111,48 +143,32 @@ const TempatPKLPage = () => {
         }
       />
 
-      <div className="mb-6 animate-fade-in">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <Input
-            placeholder="Cari nama tempat PKL..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-11 border-2 border-border focus:border-primary"
-          />
-        </div>
-      </div>
+      <Card className="border-2 border-border shadow-brutal mb-6 animate-fade-in">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Filter className="w-5 h-5" />
+            Filter
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Input placeholder="Cari nama tempat PKL..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-11 border-2 border-border focus:border-primary" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <DataTable
-        data={filteredData}
-        columns={columns}
-        onEdit={handleOpenModal}
-        onDelete={handleDelete}
-      />
+      <DataTable data={filteredData} columns={columns} onEdit={handleOpenModal} onDelete={handleDelete} />
 
-      <FormModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        title={editingItem ? 'Edit Tempat PKL' : 'Tambah Tempat PKL'}
-      >
+      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title={editingItem ? 'Edit Tempat PKL' : 'Tambah Tempat PKL'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="nama">Nama Tempat PKL</Label>
-            <Input
-              id="nama"
-              value={nama}
-              onChange={(e) => setNama(e.target.value)}
-              className="border-2"
-              required
-            />
+            <Input id="nama" value={nama} onChange={(e) => setNama(e.target.value)} className="border-2" required />
           </div>
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="flex-1 border-2">
-              Batal
-            </Button>
-            <Button type="submit" className="flex-1 border-2 border-foreground shadow-brutal-sm">
-              {editingItem ? 'Simpan' : 'Tambah'}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="flex-1 border-2">Batal</Button>
+            <Button type="submit" className="flex-1 border-2 border-foreground shadow-brutal-sm">{editingItem ? 'Simpan' : 'Tambah'}</Button>
           </div>
         </form>
       </FormModal>

@@ -9,12 +9,14 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import DataSiswa from "./pages/DataSiswa";
+import MappingPKL from "./pages/MappingPKL";
 import TempatPKL from "./pages/TempatPKL";
 import InstrukturPKL from "./pages/InstrukturPKL";
 import PembimbingSekolah from "./pages/PembimbingSekolah";
 import TujuanPembelajaran from "./pages/TujuanPembelajaran";
 import NilaiPKL from "./pages/NilaiPKL";
 import AbsensiPKL from "./pages/AbsensiPKL";
+import CetakRapor from "./pages/CetakRapor";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -33,12 +35,14 @@ const App = () => (
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/siswa" element={<DataSiswa />} />
+              <Route path="/mapping-pkl" element={<MappingPKL />} />
               <Route path="/tempat-pkl" element={<TempatPKL />} />
               <Route path="/instruktur-pkl" element={<InstrukturPKL />} />
               <Route path="/pembimbing" element={<PembimbingSekolah />} />
               <Route path="/tujuan-pembelajaran" element={<TujuanPembelajaran />} />
               <Route path="/nilai-pkl" element={<NilaiPKL />} />
               <Route path="/absensi-pkl" element={<AbsensiPKL />} />
+              <Route path="/cetak-rapor" element={<CetakRapor />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
