@@ -18,20 +18,29 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate loading
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // Kita hapus setTimeout pura-pura loadingnya, karena request API beneran butuh waktu
 
-    if (login(username, password)) {
-      toast.success('Login berhasil!', {
-        description: 'Selamat datang di Rapor-Edyan',
+    try {
+      // Panggil fungsi login dari context (sekarang pake await)
+      const success = await login(username, password);
+
+      if (success) {
+        toast.success('Login berhasil!', {
+          description: `Selamat datang kembali, ${username}!`,
+        });
+        navigate('/dashboard');
+      } else {
+        toast.error('Login gagal', {
+          description: 'Username atau password salah, coba cek lagi cok.',
+        });
+      }
+    } catch (error) {
+      toast.error('Terjadi Kesalahan', {
+        description: 'Gagal menghubungi server.',
       });
-      navigate('/dashboard');
-    } else {
-      toast.error('Login gagal', {
-        description: 'Username atau password salah',
-      });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -126,7 +135,7 @@ const Login = () => {
 
           {/* Demo Credentials */}
           <div className="mt-6 p-4 bg-muted border-2 border-border">
-            <p className="text-sm font-bold mb-2">Demo Kredensial:</p>
+            <p className="text-sm font-bold mb-2">Demo Kredensial (Database):</p>
             <p className="text-sm text-muted-foreground">
               Username: <span className="font-mono font-bold text-foreground">admin</span>
             </p>

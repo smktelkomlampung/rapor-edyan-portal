@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { FormModal } from '@/components/ui/FormModal';
@@ -13,25 +13,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Upload, Download, FileText, Filter } from 'lucide-react';
+import { Plus, Search, Upload, Download, FileText, Filter, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseExcelFile, exportToExcel, downloadExcelTemplate } from '@/utils/excelUtils';
 import { exportTableToPDF } from '@/utils/pdfUtils';
 import type { Siswa } from '@/types';
-
-const initialData: Siswa[] = [
-  { id: '1', nama: 'Ahmad Rizki', nisn: '1234567890', kelas: 'XII RPL 1', programKeahlian: 'Teknik Informatika', konsentrasiKeahlian: 'Rekayasa Perangkat Lunak' },
-  { id: '2', nama: 'Siti Nurhaliza', nisn: '1234567891', kelas: 'XII RPL 1', programKeahlian: 'Teknik Informatika', konsentrasiKeahlian: 'Rekayasa Perangkat Lunak' },
-  { id: '3', nama: 'Budi Santoso', nisn: '1234567892', kelas: 'XII RPL 2', programKeahlian: 'Teknik Informatika', konsentrasiKeahlian: 'Rekayasa Perangkat Lunak' },
-  { id: '4', nama: 'Dewi Lestari', nisn: '1234567893', kelas: 'XII RPL 2', programKeahlian: 'Teknik Informatika', konsentrasiKeahlian: 'Rekayasa Perangkat Lunak' },
-  { id: '5', nama: 'Eko Prasetyo', nisn: '1234567894', kelas: 'XII TKJ 1', programKeahlian: 'Teknik Komputer dan Jaringan', konsentrasiKeahlian: 'Administrasi Jaringan' },
-];
+import api from '@/lib/axios'; // Import Axios config
 
 const DataSiswa = () => {
-  const [data, setData] = useState<Siswa[]>(initialData);
+  const [data, setData] = useState<Siswa[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterKelas, setFilterKelas] = useState<string>('all');
   const [filterProgram, setFilterProgram] = useState<string>('all');
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Siswa | null>(null);
   const [formData, setFormData] = useState({
@@ -43,6 +40,27 @@ const DataSiswa = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Fetch Data dari Backend ---
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.get('/siswa');
+      if (response.data.success) {
+        setData(response.data.data);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Gagal mengambil data siswa');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // --- Filter Logic (Client Side) ---
   const kelasOptions = [...new Set(data.map((s) => s.kelas))];
   const programOptions = [...new Set(data.map((s) => s.programKeahlian))];
 
@@ -73,29 +91,45 @@ const DataSiswa = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // --- CRUD Operations ---
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingItem) {
-      setData(data.map((item) =>
-        item.id === editingItem.id ? { ...item, ...formData } : item
-      ));
-      toast.success('Data siswa berhasil diperbarui');
-    } else {
-      const newItem: Siswa = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      setData([...data, newItem]);
-      toast.success('Data siswa berhasil ditambahkan');
+    setIsSaving(true);
+    try {
+      if (editingItem) {
+        // Update Data
+        await api.put(`/siswa/${editingItem.id}`, formData);
+        toast.success('Data siswa berhasil diperbarui');
+      } else {
+        // Create Data
+        await api.post('/siswa', formData);
+        toast.success('Data siswa berhasil ditambahkan');
+      }
+      // Refresh Data & Close Modal
+      await fetchData();
+      setIsModalOpen(false);
+    } catch (error: any) {
+      // Handle Validation Error dari Laravel
+      const message = error.response?.data?.message || 'Terjadi kesalahan saat menyimpan';
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (item: Siswa) => {
-    setData(data.filter((d) => d.id !== item.id));
-    toast.success('Data siswa berhasil dihapus');
+  const handleDelete = async (item: Siswa) => {
+    if(!window.confirm(`Yakin ingin menghapus siswa ${item.nama}?`)) return;
+
+    try {
+      await api.delete(`/siswa/${item.id}`);
+      toast.success('Data siswa berhasil dihapus');
+      fetchData(); // Refresh list
+    } catch (error) {
+      toast.error('Gagal menghapus data');
+    }
   };
 
+  // --- Import / Export Logic ---
   const handleImportExcel = () => {
     fileInputRef.current?.click();
   };
@@ -103,6 +137,8 @@ const DataSiswa = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const loadingToast = toast.loading('Sedang memproses import...');
 
     try {
       const importedData = await parseExcelFile<{
@@ -118,23 +154,29 @@ const DataSiswa = () => {
         konsentrasiKeahlian?: string;
       }>(file);
 
-      const newData = importedData.map((row, index) => ({
-        id: Date.now().toString() + index,
+      const formattedData = importedData.map((row) => ({
         nama: row['Nama Peserta Didik'] || row.nama || '',
         nisn: (row.NISN || row.nisn || '').toString(),
         kelas: row.Kelas || row.kelas || '',
         programKeahlian: row['Program Keahlian'] || row.programKeahlian || '',
         konsentrasiKeahlian: row['Konsentrasi Keahlian'] || row.konsentrasiKeahlian || '',
-      })).filter(item => item.nama);
+      })).filter(item => item.nama && item.nisn); // Filter data kosong
 
-      setData([...data, ...newData]);
-      toast.success(`${newData.length} data berhasil diimpor dari Excel`);
-    } catch (error) {
-      toast.error('Gagal mengimpor file Excel');
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      // Kirim ke Backend Bulk Store
+      const response = await api.post('/siswa/bulk', { data: formattedData });
+      
+      if(response.data.success) {
+        toast.success(response.data.message);
+        fetchData(); // Refresh Data
+      }
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || 'Gagal mengimpor file Excel';
+      toast.error(errMsg);
+    } finally {
+      toast.dismiss(loadingToast);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -262,12 +304,20 @@ const DataSiswa = () => {
         </CardContent>
       </Card>
 
-      <DataTable
-        data={filteredData}
-        columns={columns}
-        onEdit={handleOpenModal}
-        onDelete={handleDelete}
-      />
+      {/* Loading State or Data Table */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64 border-2 border-dashed border-border rounded-lg">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <span className="ml-2 font-bold">Mengambil data...</span>
+        </div>
+      ) : (
+        <DataTable
+          data={filteredData}
+          columns={columns}
+          onEdit={handleOpenModal}
+          onDelete={handleDelete}
+        />
+      )}
 
       <FormModal
         open={isModalOpen}
@@ -297,7 +347,17 @@ const DataSiswa = () => {
           </div>
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="flex-1 border-2">Batal</Button>
-            <Button type="submit" className="flex-1 border-2 border-foreground shadow-brutal-sm">{editingItem ? 'Simpan' : 'Tambah'}</Button>
+            <Button 
+                type="submit" 
+                disabled={isSaving}
+                className="flex-1 border-2 border-foreground shadow-brutal-sm"
+            >
+                {isSaving ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</>
+                ) : (
+                    editingItem ? 'Simpan' : 'Tambah'
+                )}
+            </Button>
           </div>
         </form>
       </FormModal>
