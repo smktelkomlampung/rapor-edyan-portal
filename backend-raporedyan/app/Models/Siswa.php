@@ -21,4 +21,9 @@ class Siswa extends Model
     {
         return $this->hasOne(Mapping::class, 'siswa_id');
     }
+
+    public function nilai()
+    {
+        return $this->hasMany(NilaiPKL::class, 'siswa_id');
+    }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 
 // Public Routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/debug-ai-models', [App\Http\Controllers\Api\NilaiPKLController::class, 'checkAvailableModels']);
 
 // Protected Routes (Butuh Token)
 Route::middleware('auth:sanctum')->group(function () {
@@ -49,4 +50,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mapping', [App\Http\Controllers\Api\MappingController::class, 'index']);
     Route::post('/mapping/save', [App\Http\Controllers\Api\MappingController::class, 'storeBulk']);
     Route::post('/mapping/import', [App\Http\Controllers\Api\MappingController::class, 'import']);
+
+    // Tujuan Pembelajaran
+    Route::get('/tujuan-pembelajaran', [App\Http\Controllers\Api\TujuanPembelajaranController::class, 'index']);
+    Route::post('/tujuan-pembelajaran', [App\Http\Controllers\Api\TujuanPembelajaranController::class, 'store']);
+    Route::put('/tujuan-pembelajaran/{id}', [App\Http\Controllers\Api\TujuanPembelajaranController::class, 'update']);
+    Route::delete('/tujuan-pembelajaran/{id}', [App\Http\Controllers\Api\TujuanPembelajaranController::class, 'destroy']);
+    Route::post('/tujuan-pembelajaran/import', [App\Http\Controllers\Api\TujuanPembelajaranController::class, 'import']);
+
+    // Nilai PKL Routes
+    Route::get('/nilai-pkl/kelas', [App\Http\Controllers\Api\NilaiPKLController::class, 'getKelasList']);
+    Route::get('/nilai-pkl', [App\Http\Controllers\Api\NilaiPKLController::class, 'getByKelas']);
+    Route::post('/nilai-pkl/save', [App\Http\Controllers\Api\NilaiPKLController::class, 'storeBulk']);
+    Route::post('/nilai-pkl/import', [App\Http\Controllers\Api\NilaiPKLController::class, 'import']);
+
+    Route::post('/nilai-pkl/generate-ai', [App\Http\Controllers\Api\NilaiPKLController::class, 'generateDescription']);
 });
