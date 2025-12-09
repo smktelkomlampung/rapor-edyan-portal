@@ -218,6 +218,75 @@ class NilaiPKLController extends Controller
     // }
 
     // 5. Generate Deskripsi via AI (Gemini 1.5 Flash)
+    // public function generateDescription(Request $request)
+    // {
+    //     $request->validate([
+    //         'tp' => 'required|string',
+    //         'skor' => 'required|numeric',
+    //         'nama_siswa' => 'nullable|string'
+    //     ]);
+
+    //     $tp = $request->tp;
+    //     $skor = $request->skor;
+    //     $siswa = $request->nama_siswa ?? 'Siswa';
+    //     $apiKey = env('GEMINI_API_KEY');
+
+    //     if (!$apiKey) {
+    //         return response()->json(['success' => false, 'message' => 'API Key belum disetting di .env'], 500);
+    //     }
+
+    //     $predikat = 'Kurang';
+    //     if ($skor >= 90) $predikat = 'Sangat Baik';
+    //     else if ($skor >= 80) $predikat = 'Baik';
+    //     else if ($skor >= 70) $predikat = 'Cukup';
+
+    //     // Prompt kita buat lebih detail
+    //     $prompt = "Buatkan deskripsi rapor satu kalimat singkat (maksimal 20 kata) untuk siswa bernama '{$siswa}'.
+    //     Tujuan Pembelajaran: '{$tp}'.
+    //     Nilai: {$skor} (Predikat: {$predikat}).
+    //     Gunakan bahasa formal rapor kurikulum merdeka. Langsung kalimatnya saja.";
+
+    //     try {
+    //         // URL MENGGUNAKAN GEMINI 1.5 FLASH (Versi v1beta)
+    //         $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
+
+    //         $response = Http::withHeaders([
+    //             'Content-Type' => 'application/json',
+    //         ])->post($url, [
+    //             'contents' => [
+    //                 [
+    //                     'parts' => [
+    //                         ['text' => $prompt]
+    //                     ]
+    //                 ]
+    //             ]
+    //         ]);
+
+    //         $result = $response->json();
+
+    //         // Cek Error Google
+    //         if ($response->failed()) {
+    //             // Debugging: Tampilkan pesan error asli dari Google jika ada
+    //             $errorMsg = $result['error']['message'] ?? 'Unknown Error from Google';
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => "Google Error: $errorMsg. Pastikan API Key dibuat di aistudio.google.com"
+    //             ], 400);
+    //         }
+
+    //         // Ambil Teks
+    //         if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
+    //             $generatedText = $result['candidates'][0]['content']['parts'][0]['text'];
+    //             return response()->json(['success' => true, 'data' => trim($generatedText)]);
+    //         } else {
+    //             return response()->json(['success' => false, 'message' => 'AI tidak memberikan teks.'], 400);
+    //         }
+    //     } catch (\Exception $e) {
+    //         return response()->json(['success' => false, 'message' => 'Server Error: ' . $e->getMessage()], 500);
+    //     }
+    // }
+
+    // 5. Generate Deskripsi (Hybrid: Cloud AI + Local Fallback)
     public function generateDescription(Request $request)
     {
         $request->validate([
@@ -226,64 +295,170 @@ class NilaiPKLController extends Controller
             'nama_siswa' => 'nullable|string'
         ]);
 
-        $tp = $request->tp;
-        $skor = $request->skor;
-        $siswa = $request->nama_siswa ?? 'Siswa';
         $apiKey = env('GEMINI_API_KEY');
 
-        if (!$apiKey) {
-            return response()->json(['success' => false, 'message' => 'API Key belum disetting di .env'], 500);
+        // MODE 1: CLOUD AI (Google Gemini)
+        // Jika API Key ada, kita coba tembak ke Google dulu
+        if ($apiKey) {
+            try {
+                $tp = $request->tp;
+                $skor = $request->skor;
+                $siswa = $request->nama_siswa ?? 'Siswa';
+                $predikat = $this->getPredikat($skor);
+
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
+
+                // Fallback URL jika 2.5 belum ready di region tertentu
+                //$url = "https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key={$apiKey}";
+
+                $prompt = "Buatkan deskripsi rapor satu kalimat singkat (maksimal 20 kata) untuk siswa bernama '{$siswa}'. Tujuan: '{$tp}'. Nilai: {$skor} ({$predikat}). Bahasa formal rapor.";
+
+                $response = Http::timeout(5)->post($url, [ // Timeout 5 detik biar gak nunggu lama kalau error
+                    'contents' => [['parts' => [['text' => $prompt]]]]
+                ]);
+
+                if ($response->successful()) {
+                    $result = $response->json();
+                    if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
+                        return response()->json(['success' => true, 'data' => trim($result['candidates'][0]['content']['parts'][0]['text'])]);
+                    }
+                }
+            } catch (\Exception $e) {
+                // Jika error (koneksi/limit), diam saja dan lanjut ke MODE 2 (Lokal)
+            }
         }
 
-        $predikat = 'Kurang';
-        if ($skor >= 90) $predikat = 'Sangat Baik';
-        else if ($skor >= 80) $predikat = 'Baik';
-        else if ($skor >= 70) $predikat = 'Cukup';
+        // MODE 2: LOCAL RULE-BASED AI (Gratisan & Anti Limit)
+        // Jika API Key kosong atau Google Error, kita pakai ini
+        $localDesc = $this->localGenerator($request->tp, $request->skor, $request->nama_siswa);
 
-        // Prompt kita buat lebih detail
-        $prompt = "Buatkan deskripsi rapor satu kalimat singkat (maksimal 20 kata) untuk siswa bernama '{$siswa}'. 
-        Tujuan Pembelajaran: '{$tp}'. 
-        Nilai: {$skor} (Predikat: {$predikat}). 
-        Gunakan bahasa formal rapor kurikulum merdeka. Langsung kalimatnya saja.";
+        return response()->json([
+            'success' => true,
+            'data' => $localDesc,
+            'source' => 'local_db' // Info tambahan bahwa ini dari lokal
+        ]);
+    }
 
-        try {
-            // URL MENGGUNAKAN GEMINI 1.5 FLASH (Versi v1beta)
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
+    // --- OTAK LOKAL (DATABASE KALIMAT) ---
+    private function localGenerator($tpNama, $skor, $namaSiswa)
+    {
+        $nama = $namaSiswa ?? 'Peserta didik';
+        $tp = strtolower($tpNama);
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($url, [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt]
-                        ]
-                    ]
-                ]
-            ]);
-
-            $result = $response->json();
-
-            // Cek Error Google
-            if ($response->failed()) {
-                // Debugging: Tampilkan pesan error asli dari Google jika ada
-                $errorMsg = $result['error']['message'] ?? 'Unknown Error from Google';
-                return response()->json([
-                    'success' => false,
-                    'message' => "Google Error: $errorMsg. Pastikan API Key dibuat di aistudio.google.com"
-                ], 400);
-            }
-
-            // Ambil Teks
-            if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-                $generatedText = $result['candidates'][0]['content']['parts'][0]['text'];
-                return response()->json(['success' => true, 'data' => trim($generatedText)]);
-            } else {
-                return response()->json(['success' => false, 'message' => 'AI tidak memberikan teks.'], 400);
-            }
-        } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Server Error: ' . $e->getMessage()], 500);
+        // 1. Tentukan Kategori TP berdasarkan Kata Kunci
+        $kategori = 'umum';
+        if (str_contains($tp, 'soft skills') || str_contains($tp, 'soft skill')) {
+            $kategori = 'soft_skill'; // TP 1
+        } elseif (str_contains($tp, 'k3lh') || str_contains($tp, 'norma') || str_contains($tp, 'pos')) {
+            $kategori = 'k3lh'; // TP 2
+        } elseif (str_contains($tp, 'kompetensi teknis') || str_contains($tp, 'teknis')) {
+            $kategori = 'teknis'; // TP 3
+        } elseif (str_contains($tp, 'bisnis') || str_contains($tp, 'wirausaha')) {
+            $kategori = 'bisnis'; // TP 4
         }
+
+        // 2. Tentukan Predikat & Template Kalimat
+        // Kita pakai array random biar kalimatnya gak monoton (biar kayak AI beneran)
+        $templates = [];
+
+        if ($skor >= 90) { // SANGAT BAIK
+            switch ($kategori) {
+                case 'soft_skill':
+                    $templates = [
+                        "$nama menunjukkan soft skills yang sangat prima, terutama dalam komunikasi dan kerjasama tim.",
+                        "Sangat konsisten menerapkan kedisiplinan dan etika kerja yang profesional di tempat PKL.",
+                        "$nama sangat adaptif dan memiliki inisiatif tinggi dalam menyelesaikan tugas."
+                    ];
+                    break;
+                case 'k3lh':
+                    $templates = [
+                        "Sangat patuh dan konsisten menerapkan prosedur K3LH serta SOP perusahaan.",
+                        "$nama menjadi teladan dalam penerapan norma keselamatan kerja di lingkungan industri.",
+                        "Pemahaman dan penerapan POS serta K3LH sangat istimewa dan tanpa cela."
+                    ];
+                    break;
+                case 'teknis':
+                    $templates = [
+                        "$nama sangat mahir menguasai kompetensi teknis dan peralatan industri dengan presisi.",
+                        "Kualitas hasil kerja teknis sangat memuaskan dan melampaui standar minimal.",
+                        "Sangat terampil dalam menerapkan ilmu sekolah ke dalam praktik kerja nyata."
+                    ];
+                    break;
+                case 'bisnis':
+                    $templates = [
+                        "Sangat memahami alur bisnis perusahaan dan memiliki wawasan wirausaha yang tajam.",
+                        "$nama mampu menganalisis proses bisnis industri dengan sangat baik.",
+                        "Memiliki potensi wirausaha yang kuat dan pemahaman bisnis yang komprehensif."
+                    ];
+                    break;
+                default: // Umum
+                    $templates = [
+                        "$nama sangat baik dalam menguasai capaian pembelajaran ini.",
+                        "Pencapaian kompetensi sangat memuaskan dan konsisten.",
+                        "Sangat kompeten dalam seluruh aspek materi ini."
+                    ];
+            }
+        } elseif ($skor >= 80) { // BAIK
+            switch ($kategori) {
+                case 'soft_skill':
+                    $templates = [
+                        "$nama memiliki soft skills yang baik dan mampu bekerja sama dengan tim.",
+                        "Sudah menerapkan etika kerja dan kedisiplinan dengan baik.",
+                        "Komunikasi dan adaptasi di lingkungan kerja tergolong baik."
+                    ];
+                    break;
+                case 'k3lh':
+                    $templates = [
+                        "Sudah menerapkan prosedur K3LH dan norma kerja dengan baik.",
+                        "$nama mematuhi POS dan aturan keselamatan kerja dengan disiplin.",
+                        "Penerapan K3LH dalam bekerja sudah berjalan dengan aman dan baik."
+                    ];
+                    break;
+                case 'teknis':
+                    $templates = [
+                        "$nama mampu menerapkan kompetensi teknis sesuai standar industri.",
+                        "Keterampilan teknis berkembang baik dan hasil kerja dapat diandalkan.",
+                        "Baik dalam menggunakan peralatan dan menyelesaikan tugas teknis."
+                    ];
+                    break;
+                case 'bisnis':
+                    $templates = [
+                        "Memahami alur bisnis tempat PKL dengan baik.",
+                        "$nama memiliki wawasan wirausaha yang cukup berkembang.",
+                        "Dapat menjelaskan proses bisnis industri dengan baik."
+                    ];
+                    break;
+                default:
+                    $templates = [
+                        "$nama sudah kompeten dalam materi ini.",
+                        "Hasil capaian pembelajaran tergolong baik.",
+                        "Mampu menerapkan materi dengan baik di tempat kerja."
+                    ];
+            }
+        } elseif ($skor >= 70) { // CUKUP
+            $templates = [
+                "$nama cukup mampu dalam aspek ini namun perlu ditingkatkan lagi.",
+                "Pencapaian kompetensi sudah memenuhi standar minimal.",
+                "Perlu lebih konsisten lagi dalam menerapkan materi ini."
+            ];
+        } else { // KURANG
+            $templates = [
+                "$nama perlu bimbingan intensif untuk menguasai kompetensi ini.",
+                "Belum maksimal dalam menerapkan materi di tempat kerja.",
+                "Perlu peningkatan signifikan dalam kedisiplinan dan pemahaman materi."
+            ];
+        }
+
+        // 3. Pilih Salah Satu Kalimat secara Acak
+        return $templates[array_rand($templates)];
+    }
+
+    private function getPredikat($skor)
+    {
+        if ($skor >= 90) return 'Sangat Baik';
+        if ($skor >= 80) return 'Baik';
+        if ($skor >= 70) return 'Cukup';
+        return 'Kurang';
     }
 
     // Fungsi Debugging: Cek Model apa yang tersedia untuk Key ini
