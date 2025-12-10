@@ -219,7 +219,7 @@ export const generateRaporPDF = (data: RaporData) => {
   // Footer
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text(`Dicetak melalui Rapor-Edyan | ${data.nama} | ${data.kelas}`, 15, 290);
+  doc.text(`Dicetak melalui e-Rapor SMK Telkom Lampung | ${data.nama} | ${data.kelas}`, 15, 290);
 
   return doc;
 };
