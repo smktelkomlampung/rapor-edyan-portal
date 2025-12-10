@@ -85,4 +85,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/kelas/{id}', [App\Http\Controllers\Api\KelasController::class, 'update']);
     Route::delete('/kelas/{id}', [App\Http\Controllers\Api\KelasController::class, 'destroy']);
     Route::post('/kelas/sync', [App\Http\Controllers\Api\KelasController::class, 'syncFromSiswa']);
+
+    // Dashboard
+    Route::get('/dashboard', [App\Http\Controllers\Api\DashboardController::class, 'index']);
 });

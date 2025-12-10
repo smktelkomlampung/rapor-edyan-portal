@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -8,40 +9,12 @@ import {
   BookOpen, 
   ClipboardList,
   TrendingUp,
-  Calendar
+  Calendar,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const stats = [
-  { 
-    title: 'Total Siswa', 
-    value: '245', 
-    icon: Users, 
-    color: 'bg-primary',
-    path: '/siswa'
-  },
-  { 
-    title: 'Tempat PKL', 
-    value: '32', 
-    icon: Building2, 
-    color: 'bg-accent',
-    path: '/tempat-pkl'
-  },
-  { 
-    title: 'Instruktur PKL', 
-    value: '28', 
-    icon: UserCheck, 
-    color: 'bg-chart-3',
-    path: '/instruktur-pkl'
-  },
-  { 
-    title: 'Pembimbing Sekolah', 
-    value: '15', 
-    icon: GraduationCap, 
-    color: 'bg-chart-4',
-    path: '/pembimbing'
-  },
-];
+import api from '@/lib/axios';
+import { toast } from 'sonner';
 
 const quickLinks = [
   { title: 'Tujuan Pembelajaran', icon: BookOpen, path: '/tujuan-pembelajaran' },
@@ -51,6 +24,88 @@ const quickLinks = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // State Data Dashboard
+  const [data, setData] = useState({
+    stats: {
+        total_siswa: 0,
+        total_tempat: 0,
+        total_instruktur: 0,
+        total_pembimbing: 0
+    },
+    settings: {
+        tahun_pelajaran: '-',
+        tanggal_mulai_pkl: '',
+        tanggal_akhir_pkl: ''
+    }
+  });
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+        try {
+            const res = await api.get('/dashboard');
+            if(res.data.success) {
+                setData(res.data.data);
+            }
+        } catch (error) {
+            console.error("Error fetching dashboard", error);
+            toast.error("Gagal memuat data dashboard");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchDashboard();
+  }, []);
+
+  // Helper Format Periode (Bulan Tahun)
+  const formatPeriode = (start: string, end: string) => {
+    if(!start || !end) return '-';
+    const d1 = new Date(start);
+    const d2 = new Date(end);
+    const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
+    return `${d1.toLocaleDateString('id-ID', options)} - ${d2.toLocaleDateString('id-ID', options)}`;
+  };
+
+  // Stats Array (Dinamis dari State)
+  const statsItems = [
+    { 
+      title: 'Total Siswa', 
+      value: data.stats.total_siswa, 
+      icon: Users, 
+      color: 'bg-primary',
+      path: '/siswa'
+    },
+    { 
+      title: 'Tempat PKL', 
+      value: data.stats.total_tempat, 
+      icon: Building2, 
+      color: 'bg-accent',
+      path: '/tempat-pkl'
+    },
+    { 
+      title: 'Instruktur PKL', 
+      value: data.stats.total_instruktur, 
+      icon: UserCheck, 
+      color: 'bg-chart-3',
+      path: '/instruktur-pkl'
+    },
+    { 
+      title: 'Pembimbing Sekolah', 
+      value: data.stats.total_pembimbing, 
+      icon: GraduationCap, 
+      color: 'bg-chart-4',
+      path: '/pembimbing'
+    },
+  ];
+
+  if (isLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+  }
 
   return (
     <div>
@@ -61,7 +116,7 @@ const Dashboard = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+        {statsItems.map((stat, index) => (
           <Card 
             key={stat.title}
             onClick={() => navigate(stat.path)}
@@ -80,7 +135,7 @@ const Dashboard = () => {
               <p className="text-4xl font-bold">{stat.value}</p>
               <div className="flex items-center gap-1 mt-2 text-accent text-sm">
                 <TrendingUp className="w-4 h-4" />
-                <span>Aktif</span>
+                <span>Terdata</span>
               </div>
             </CardContent>
           </Card>
@@ -117,11 +172,13 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-muted border-2 border-border">
               <p className="text-sm text-muted-foreground">Tahun Pelajaran</p>
-              <p className="text-lg font-bold">2024/2025</p>
+              <p className="text-lg font-bold">{data.settings?.tahun_pelajaran || 'Belum disetting'}</p>
             </div>
             <div className="p-4 bg-muted border-2 border-border">
               <p className="text-sm text-muted-foreground">Periode PKL</p>
-              <p className="text-lg font-bold">Januari - Juni 2025</p>
+              <p className="text-lg font-bold">
+                {formatPeriode(data.settings?.tanggal_mulai_pkl, data.settings?.tanggal_akhir_pkl)}
+              </p>
             </div>
           </div>
         </CardContent>
