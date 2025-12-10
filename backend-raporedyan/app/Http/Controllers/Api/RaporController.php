@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Siswa;
 use App\Models\TujuanPembelajaran;
 use App\Models\Kelas;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 
 class RaporController extends Controller
@@ -14,6 +15,21 @@ class RaporController extends Controller
     {
         $kelas = $request->query('kelas');
         if (!$kelas) return response()->json(['success' => false, 'message' => 'Kelas harus dipilih'], 400);
+
+        // [BARU] Ambil Data Wali Kelas dari tabel 'kelas'
+        $dataKelas = Kelas::where('nama', $kelas)->first();
+
+        $waliKelas = '-';
+        $nipWali = '-';
+
+        if ($dataKelas) {
+            // Format Nama Lengkap: [Depan] [Nama], [Belakang]
+            $depan = $dataKelas->gelar_depan ? $dataKelas->gelar_depan . ' ' : '';
+            $belakang = $dataKelas->gelar_belakang ? ', ' . $dataKelas->gelar_belakang : '';
+            $waliKelas = $depan . $dataKelas->wali_kelas . $belakang;
+
+            $nipWali = $dataKelas->nip;
+        }
 
         // [BARU] Ambil Data Wali Kelas dari tabel 'kelas'
         $dataKelas = Kelas::where('nama', $kelas)->first();
@@ -44,6 +60,22 @@ class RaporController extends Controller
             ])
             ->orderBy('nama')
             ->get();
+
+        // [BARU] Ambil Pengaturan Sekolah (Kop Surat & TTD)
+        $settingDB = Setting::first();
+
+        // Default value jika belum disetting
+        $sekolahInfo = [
+            'namaSekolah' => $settingDB->nama_sekolah ?? 'SMK BELUM DISETTING',
+            'tahunPelajaran' => $settingDB->tahun_pelajaran ?? date('Y'),
+            'kepalaSekolah' => $settingDB->nama_kepala_sekolah ?? '-',
+            'nipKepala' => $settingDB->nip_kepala_sekolah ?? '-',
+            'kota' => $settingDB->kota ?? 'Indonesia',
+            // Format tanggal rapor (misal: 2024-12-15 jadi "15 Desember 2024")
+            'tanggalCetak' => $settingDB->tanggal_rapor ? date('d F Y', strtotime($settingDB->tanggal_rapor)) : date('d F Y'),
+            'tglMulai' => $settingDB->tanggal_mulai_pkl ? date('d F Y', strtotime($settingDB->tanggal_mulai_pkl)) : '-',
+            'tglAkhir' => $settingDB->tanggal_akhir_pkl ? date('d F Y', strtotime($settingDB->tanggal_akhir_pkl)) : '-',
+        ];
 
         // Format Data agar siap dilahap Frontend
         $dataRapor = $siswa->map(function ($s) use ($listTP, $waliKelas, $nipWali) {
@@ -89,7 +121,8 @@ class RaporController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $dataRapor
+            'data' => $dataRapor,
+            'meta_settings' => $sekolahInfo // [BARU] Kirim settings terpisah
         ]);
     }
 }

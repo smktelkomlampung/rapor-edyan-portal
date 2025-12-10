@@ -224,7 +224,7 @@ export const generateRaporPDF = (data: RaporData) => {
   return doc;
 };
 
-// --- BAGIAN 2: EXPORT TABEL BIASA (Ini yang hilang tadi) ---
+// --- BAGIAN 2: EXPORT TABEL BIASA (Export Excel/PDF Data Table) ---
 export const exportTableToPDF = <T extends object>(
   data: T[],
   columns: { key: keyof T; header: string }[],

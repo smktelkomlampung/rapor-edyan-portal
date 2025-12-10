@@ -57,6 +57,8 @@ interface RaporDataComplete {
         alpha: number;
         catatan: string;
     };
+    waliKelas: string;
+    nipWali: string;
 }
 
 const CetakRapor = () => {
@@ -73,18 +75,44 @@ const CetakRapor = () => {
 
   const [isZipping, setIsZipping] = useState(false);
 
-  // Settings Sekolah (Bisa dipindah ke database Settings nanti)
-  const settings = {
-    namaSekolah: 'SMK TELKOM LAMPUNG',
-    tahunPelajaran: '2024/2025',
-    tanggalMulai: '15 Juli 2024',
-    tanggalAkhir: '13 Desember 2024',
-    namaKepalaSekolah: 'ADANG WIHANDA, S.T.',
-    nipKepala: '-',
-    waliKelas: 'KHAFIDH FEBRIANSYAH, S.Pd.', // Idealnya dari DB
-    kota: 'Pringsewu',
-    tanggalCetak: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-  };
+  // State untuk Settings Sekolah (Dinamis dari Backend)
+  const [settings, setSettings] = useState({
+    namaSekolah: '',
+    tahunPelajaran: '',
+    tanggalMulai: '',
+    tanggalAkhir: '',
+    namaKepalaSekolah: '',
+    nipKepala: '',
+    waliKelas: '', // Placeholder, nanti diisi per siswa
+    kota: '',
+    tanggalCetak: ''
+  });
+
+  // 0. Load Settings Sekolah
+  useEffect(() => {
+    api.get('/settings').then(res => {
+        if(res.data.success) {
+            const d = res.data.data;
+            // Helper format tanggal Indo
+            const formatDate = (dateString: string) => {
+                if(!dateString) return '-';
+                return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            };
+
+            setSettings({
+                namaSekolah: d.nama_sekolah || 'Nama Sekolah Belum Diisi',
+                tahunPelajaran: d.tahun_pelajaran || '-',
+                tanggalMulai: formatDate(d.tanggal_mulai_pkl),
+                tanggalAkhir: formatDate(d.tanggal_akhir_pkl),
+                namaKepalaSekolah: d.nama_kepala_sekolah || '-',
+                nipKepala: d.nip_kepala_sekolah || '-',
+                waliKelas: '-', // Akan diupdate saat generate per siswa
+                kota: d.kota || 'Kota',
+                tanggalCetak: formatDate(d.tanggal_rapor)
+            });
+        }
+    });
+  }, []);
 
   // 1. Load Kelas
   useEffect(() => {
@@ -100,11 +128,8 @@ const CetakRapor = () => {
   // 2. Load Siswa saat Kelas berubah
   useEffect(() => {
     if(selectedKelas) {
-        // Ambil data dari endpoint Nilai (karena disana sudah terstruktur per kelas)
-        // Atau bisa dari endpoint Siswa biasa. Kita pakai endpoint Nilai biar sekalian cek kelengkapan.
         api.get(`/nilai-pkl?kelas=${selectedKelas}`).then(res => {
             if(res.data.success) {
-                // Map data siswa untuk dropdown
                 const options = res.data.data.siswa.map((s: any) => ({
                     id: s.id,
                     nama: s.nama
@@ -117,7 +142,7 @@ const CetakRapor = () => {
     }
   }, [selectedKelas]);
 
-  // 3. Generate Preview Data (Fetch Realtime dari berbagai endpoint)
+  // 3. Generate Preview Data
   const handlePreview = async () => {
     if (!selectedSiswaId) {
       toast.error('Pilih siswa terlebih dahulu');
@@ -126,67 +151,48 @@ const CetakRapor = () => {
 
     setIsLoading(true);
     try {
-        // Kita butuh 3 data: Mapping, Nilai, Absensi.
-        // Karena endpoint backend kita terpisah, kita panggil paralel.
-        // (Idealnya backend punya 1 endpoint /rapor/{id} yg menggabungkan ini)
-        
-        // A. Ambil Info Siswa & Nilai
         const resNilai = await api.get(`/nilai-pkl?kelas=${selectedKelas}`);
         const dataNilaiRaw = resNilai.data.data;
         const siswaNilai = dataNilaiRaw.siswa.find((s:any) => s.id === selectedSiswaId);
         
-        // Format Nilai
         const nilaiFormatted = dataNilaiRaw.tujuanPembelajaran.map((tp: any) => {
             const n = siswaNilai.nilai[tp.id] || { skor: 0, deskripsi: '-' };
             return {
-                tp: tp.nama.replace(/<[^>]*>?/gm, ''), // Hapus tag HTML
+                tp: tp.nama.replace(/<[^>]*>?/gm, ''),
                 skor: n.skor,
                 deskripsi: n.deskripsi || '-'
             };
         });
 
-        // B. Ambil Mapping
-        const resMapping = await api.get('/mapping');
-        const mappingRaw = resMapping.data.data.mappings.find((m:any) => m.id === selectedSiswaId);
-        // Perlu cari nama text dari ID mapping (karena backend kirim ID)
-        // Ini agak tricky tanpa endpoint khusus detail siswa.
-        // Asumsi: Kita pakai placeholder dulu jika mapping belum ideal di backend, 
-        // ATAU kita perbaiki backend MappingController index untuk kirim object nama juga.
-        // SEMENTARA: Kita ambil dari list option yang dikirim MappingController
-        const tempatList = resMapping.data.data.options.tempat;
-        const instrukturList = resMapping.data.data.options.instruktur;
-        const pembimbingList = resMapping.data.data.options.pembimbing;
+        // Ambil data lengkap siswa termasuk Wali Kelas dari endpoint Bulk
+        const resBulk = await api.get(`/rapor/bulk?kelas=${selectedKelas}`);
+        const siswaBulk = resBulk.data.data.find((s:any) => s.id === selectedSiswaId);
 
-        const namaTempat = tempatList.find((t:any) => t.id == mappingRaw.tempatPKLId)?.nama || '-';
-        const namaInstruktur = instrukturList.find((i:any) => i.id == mappingRaw.instrukturPKLId)?.nama || '-';
-        const namaPembimbing = pembimbingList.find((p:any) => p.id == mappingRaw.pembimbingSekolahId)?.nama || '-';
-
-        // C. Ambil Absensi
-        const resAbsen = await api.get(`/absensi?kelas=${selectedKelas}`);
-        const absenRaw = resAbsen.data.data.find((a:any) => a.id === selectedSiswaId);
-
-        // Gabungkan Data
         const completeData: RaporDataComplete = {
             siswa: {
                 id: selectedSiswaId,
                 nama: siswaNilai.nama,
                 nisn: siswaNilai.nisn,
                 kelas: selectedKelas,
-                programKeahlian: 'Teknik Jaringan Komputer dan Telekomunikasi', // Hardcoded / Ambil dari DB
-                konsentrasiKeahlian: 'Teknik Komputer dan Jaringan', // Hardcoded / Ambil dari DB
+                programKeahlian: siswaBulk?.programKeahlian || 'Teknik Jaringan Komputer dan Telekomunikasi',
+                konsentrasiKeahlian: siswaBulk?.konsentrasiKeahlian || 'Teknik Komputer dan Jaringan',
             },
             mapping: {
-                tempat: namaTempat,
-                instruktur: namaInstruktur,
-                pembimbing: namaPembimbing
+                tempat: siswaBulk?.tempatPKL || '-',
+                instruktur: siswaBulk?.instrukturPKL || '-',
+                pembimbing: siswaBulk?.pembimbingSekolah || '-'
             },
             nilai: nilaiFormatted,
             absensi: {
-                sakit: absenRaw?.sakit || 0,
-                izin: absenRaw?.izin || 0,
-                alpha: absenRaw?.alpha || 0,
-                catatan: absenRaw?.catatan || 'Sudah melakukan kegiatan PKL dengan baik.'
-            }
+                sakit: siswaBulk?.absensi?.sakit || 0,
+                izin: siswaBulk?.absensi?.izin || 0,
+                alpha: siswaBulk?.absensi?.alpha || 0,
+                catatan: siswaBulk?.absensi?.catatan || 'Sudah melakukan kegiatan PKL dengan baik.'
+            },
+            // Ambil data Wali Kelas
+            // @ts-ignore
+            waliKelas: siswaBulk?.waliKelas || '-', 
+            nipWali: siswaBulk?.nipWali || '-'
         };
 
         setPreviewData(completeData);
@@ -222,7 +228,8 @@ const CetakRapor = () => {
         tahunAjaran: settings.tahunPelajaran,
         kepalaSekolah: settings.namaKepalaSekolah,
         nipKepala: settings.nipKepala,
-        waliKelas: settings.waliKelas,
+        // Gunakan Wali Kelas dari data siswa
+        waliKelas: previewData.waliKelas || '-',
         tanggalCetak: settings.tanggalCetak,
         kota: settings.kota
       }
@@ -243,7 +250,6 @@ const CetakRapor = () => {
     const toastId = toast.loading('Menyiapkan data rapor sekelas...');
 
     try {
-        // 1. Ambil Data Lengkap Sekelas dari Backend
         const res = await api.get(`/rapor/bulk?kelas=${selectedKelas}`);
         if (!res.data.success) throw new Error('Gagal mengambil data');
 
@@ -251,13 +257,9 @@ const CetakRapor = () => {
         const zip = new JSZip();
         const folder = zip.folder(`Rapor_PKL_${selectedKelas.replace(/\s+/g, '_')}`);
 
-        // 2. Loop & Generate PDF
         let count = 0;
         
-        // Kita pakai Promise.all biar generate-nya paralel (cepat)
-        // Tapi hati-hati memori kalau kelasnya > 100 orang. Untuk 30-40 aman.
         siswaList.forEach((siswa: any) => {
-            // Mapping data backend ke format PDF Generator
             const pdfData = {
                 nama: siswa.nama,
                 nisn: siswa.nisn,
@@ -269,7 +271,7 @@ const CetakRapor = () => {
                 pembimbing: siswa.pembimbingSekolah,
                 tanggalMulai: settings.tanggalMulai,
                 tanggalAkhir: settings.tanggalAkhir,
-                nilai: siswa.nilai, // Struktur nilai backend sudah sama dgn format PDF
+                nilai: siswa.nilai,
                 catatan: siswa.absensi.catatan,
                 absensi: siswa.absensi,
                 settings: {
@@ -277,24 +279,21 @@ const CetakRapor = () => {
                     tahunAjaran: settings.tahunPelajaran,
                     kepalaSekolah: settings.namaKepalaSekolah,
                     nipKepala: settings.nipKepala,
-                    waliKelas: settings.waliKelas,
+                    // Dynamic Wali Kelas per Siswa
+                    waliKelas: siswa.waliKelas || '-', 
                     tanggalCetak: settings.tanggalCetak,
                     kota: settings.kota
                 }
             };
 
-            // Generate PDF Blob
             const doc = generateRaporPDF(pdfData);
             const pdfBlob = doc.output('blob');
             
-            // Masukkan ke ZIP
-            // Nama File: 01_NamaSiswa.pdf (biar urut absen/nama)
             const namaFile = `${String(count + 1).padStart(2, '0')}_${siswa.nama.replace(/\s+/g, '_')}.pdf`;
             folder?.file(namaFile, pdfBlob);
             count++;
         });
 
-        // 3. Generate File ZIP Akhir
         toast.loading(`Mengkompres ${count} file PDF...`, { id: toastId });
         
         const content = await zip.generateAsync({ type: 'blob' });
@@ -500,6 +499,15 @@ const CetakRapor = () => {
                         <h4 className="font-bold mb-2">Catatan</h4>
                         <p className="text-xs italic text-muted-foreground">"{previewData.absensi.catatan}"</p>
                     </div>
+                  </div>
+
+                  {/* Footer TTD (Preview Only) */}
+                  <div className="mt-8 flex justify-end text-xs text-muted-foreground">
+                      <div className="text-right">
+                          <p>{settings.kota}, {settings.tanggalCetak}</p>
+                          <p className="mt-8 font-bold underline">{previewData.waliKelas}</p>
+                          <p>Wali Kelas</p>
+                      </div>
                   </div>
 
                 </div>
