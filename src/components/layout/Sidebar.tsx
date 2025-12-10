@@ -22,6 +22,7 @@ import { useState } from 'react';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Data Siswa', path: '/siswa' },
+  { icon: Users, label: 'Wali Kelas', path: '/wali-kelas' },
   { icon: Link2, label: 'Mapping PKL', path: '/mapping-pkl' },
   { icon: Building2, label: 'Tempat PKL', path: '/tempat-pkl' },
   { icon: UserCheck, label: 'Instruktur PKL', path: '/instruktur-pkl' },
@@ -30,7 +31,7 @@ const menuItems = [
   { icon: ClipboardList, label: 'Nilai PKL', path: '/nilai-pkl' },
   { icon: Calendar, label: 'Absensi PKL', path: '/absensi-pkl' },
   { icon: Printer, label: 'Cetak Rapor', path: '/cetak-rapor' },
-  { icon: Settings, label: 'Pengaturan', path: '/settings' },
+  { icon: Settings, label: 'Pengaturan', path: '/settings' },  
 ];
 
 export const Sidebar = () => {

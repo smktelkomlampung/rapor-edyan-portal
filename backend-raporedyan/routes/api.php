@@ -71,4 +71,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/absensi', [App\Http\Controllers\Api\AbsensiPKLController::class, 'getByKelas']);
     Route::post('/absensi/save', [App\Http\Controllers\Api\AbsensiPKLController::class, 'storeBulk']);
     Route::post('/absensi/import', [App\Http\Controllers\Api\AbsensiPKLController::class, 'import']);
+
+    // Route khusus cetak massal
+    Route::get('/rapor/bulk', [App\Http\Controllers\Api\RaporController::class, 'getBulkData']);
+
+    // Setting Routes
+    Route::get('/settings', [App\Http\Controllers\Api\SettingController::class, 'index']);
+    Route::post('/settings', [App\Http\Controllers\Api\SettingController::class, 'update']);
+
+    // Route Kelas & Wali Kelas
+    Route::get('/kelas', [App\Http\Controllers\Api\KelasController::class, 'index']);
+    Route::post('/kelas', [App\Http\Controllers\Api\KelasController::class, 'store']);
+    Route::put('/kelas/{id}', [App\Http\Controllers\Api\KelasController::class, 'update']);
+    Route::delete('/kelas/{id}', [App\Http\Controllers\Api\KelasController::class, 'destroy']);
+    Route::post('/kelas/sync', [App\Http\Controllers\Api\KelasController::class, 'syncFromSiswa']);
 });

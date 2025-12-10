@@ -38,21 +38,21 @@ interface RaporData {
 export const generateRaporPDF = (data: RaporData) => {
   const doc = new jsPDF();
 
-  // --- 1. HEADER (Dibuat lebih naik ke atas biar hemat tempat) ---
+  // --- 1. HEADER ---
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(data.settings.sekolah.toUpperCase(), 105, 15, { align: 'center' }); // Y=15
+  doc.text(data.settings.sekolah.toUpperCase(), 105, 15, { align: 'center' });
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Tahun Ajaran ${data.settings.tahunAjaran}`, 105, 21, { align: 'center' }); // Y=21
+  doc.text(`Tahun Ajaran ${data.settings.tahunAjaran}`, 105, 21, { align: 'center' });
 
-  // --- 2. BIODATA (Compact Spacing) ---
-  const startY = 30; // Mulai lebih atas
+  // --- 2. BIODATA ---
+  const startY = 30;
   const col1 = 15;
   const col2 = 55;
   
-  doc.setFontSize(9); // Font sedikit diperkecil biar muat
+  doc.setFontSize(9);
   
   const biodata = [
     ['Nama Peserta Didik', `: ${data.nama}`],
@@ -69,13 +69,12 @@ export const generateRaporPDF = (data: RaporData) => {
   let currentY = startY;
   biodata.forEach(([label, value]) => {
     doc.text(label, col1, currentY);
-    // Handle text wrapping jika nama/jurusan kepanjangan
     const splitValue = doc.splitTextToSize(value, 140);
     doc.text(splitValue, col2, currentY);
-    currentY += (splitValue.length * 5); // Spasi antar baris lebih rapat (5)
+    currentY += (splitValue.length * 5); 
   });
 
-  // --- 3. TABEL NILAI (AutoTable) ---
+  // --- 3. TABEL NILAI ---
   const tableData = data.nilai.map(n => [
     n.tp,
     n.skor,
@@ -86,51 +85,52 @@ export const generateRaporPDF = (data: RaporData) => {
     startY: currentY + 2,
     head: [['Tujuan Pembelajaran', 'Skor', 'Deskripsi']],
     body: tableData,
-    theme: 'grid', // Ada garis border
+    theme: 'grid',
     headStyles: {
-      fillColor: [255, 255, 255], 
-      textColor: [0, 0, 0],
+      fillColor: [230, 230, 230], // Abu-abu muda
+      textColor: [0, 0, 0],       // Hitam
       lineWidth: 0.1,
       lineColor: [0, 0, 0],
       halign: 'center',
       valign: 'middle',
       fontStyle: 'bold',
-      fontSize: 9, // Font header kecil
-      cellPadding: 2
+      fontSize: 9,
+      cellPadding: 3
     },
     bodyStyles: {
       textColor: [0, 0, 0],
       lineWidth: 0.1,
       lineColor: [0, 0, 0],
       valign: 'top',
-      fontSize: 9, // Font isi kecil
-      cellPadding: 2
+      fontSize: 9,
+      cellPadding: 3
     },
     columnStyles: {
-      0: { cellWidth: 60 }, 
+      0: { cellWidth: 70 }, 
       1: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }, 
       2: { cellWidth: 'auto' }, 
     },
+    margin: { left: 15, right: 15 }
   });
 
-  // --- 4. CATATAN (Sekarang pakai Tabel biar ada Border) ---
+  // --- 4. TABEL CATATAN (Dengan Jarak) ---
   // @ts-ignore
-  let finalY = doc.lastAutoTable.finalY + 5;
+  let finalY = doc.lastAutoTable.finalY + 5; // BERI JARAK 10 BIAR TIDAK NEMPEL
 
-  // Kita gunakan autoTable untuk catatan agar otomatis punya border rapi
   autoTable(doc, {
     startY: finalY,
     head: [['Catatan']],
     body: [[data.catatan || "-"]],
     theme: 'grid',
     headStyles: {
-        fillColor: [240, 240, 240], // Abu-abu muda biar beda
+        fillColor: [230, 230, 230], // Abu-abu muda
         textColor: [0, 0, 0],
         lineWidth: 0.1,
         lineColor: [0, 0, 0],
         fontStyle: 'bold',
         fontSize: 9,
-        cellPadding: 2
+        cellPadding: 2,
+        halign: 'left'
     },
     bodyStyles: {
         textColor: [0, 0, 0],
@@ -139,46 +139,50 @@ export const generateRaporPDF = (data: RaporData) => {
         fontSize: 9,
         fontStyle: 'italic',
         cellPadding: 3
-    }
+    },
+    margin: { left: 15, right: 15 } // Full Width sejajar atas
   });
 
-  // --- 5. TABEL ABSENSI (Sekarang pakai Grid Border) ---
+  // --- 5. TABEL ABSENSI (Compact, Sejajar Kiri, Teks Hitam) ---
   // @ts-ignore
   finalY = doc.lastAutoTable.finalY + 5;
   
   autoTable(doc, {
     startY: finalY,
-    head: [['Ketidakhadiran', 'Jumlah (Hari)']], // Tambah header biar jelas
+    // Header Colspan dengan warna teks HITAM
+    head: [[
+        { content: 'Ketidakhadiran', colSpan: 2, styles: { halign: 'left', fillColor: [230, 230, 230], textColor: [0, 0, 0] } }
+    ]],
     body: [
-      ['Sakit', `${data.absensi.sakit}`],
-      ['Izin', `${data.absensi.izin}`],
-      ['Tanpa Keterangan', `${data.absensi.alpha}`],
+      ['Sakit', `: ${data.absensi.sakit} Hari`],
+      ['Izin', `: ${data.absensi.izin} Hari`],
+      ['Tanpa Keterangan', `: ${data.absensi.alpha} Hari`],
     ],
-    theme: 'grid', // UBAH KE GRID (Ada Border)
+    theme: 'grid',
     styles: { 
         fontSize: 9, 
         cellPadding: 2,
         lineWidth: 0.1,
-        lineColor: [0, 0, 0]
+        lineColor: [0, 0, 0],
+        textColor: [0, 0, 0] // Pastikan isi tabel hitam
     },
     headStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        halign: 'left'
+        fontStyle: 'bold',
+        lineWidth: 0.1,
+        lineColor: [0, 0, 0]
     },
     columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 30, halign: 'center' }
+        0: { cellWidth: 40 }, // Lebar label
+        1: { cellWidth: 40 }  // Lebar isi (total lebar tabel 80, jadi tidak full page)
     },
-    margin: { left: 15 } // Rata kiri
+    // Margin kiri 15 agar lurus dengan tabel atas, tapi TIDAK ADA margin kanan (biar compact)
+    margin: { left: 15 } 
   });
 
-  // --- 6. TANDA TANGAN (Posisi Statis di Bawah atau Dinamis) ---
+  // --- 6. TANDA TANGAN ---
   // @ts-ignore
   let signY = doc.lastAutoTable.finalY + 15;
 
-  // Cek sisa halaman, kalau mepet banget (misal < 40mm sisa), baru add page.
-  // Tapi target kita 1 halaman, jadi kita usahakan muat.
   if (signY > 260) {
       doc.addPage();
       signY = 30;
@@ -190,7 +194,7 @@ export const generateRaporPDF = (data: RaporData) => {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
 
-  // Tanggal & Tempat
+  // Tanggal
   doc.text(`${data.settings.kota}, ${data.settings.tanggalCetak}`, rightX, signY);
   signY += 6;
 
@@ -198,7 +202,7 @@ export const generateRaporPDF = (data: RaporData) => {
   doc.text("Wali Kelas", leftX, signY);
   doc.text("Kepala Sekolah", rightX, signY);
 
-  signY += 25; // Ruang tanda tangan
+  signY += 25; // Space TTD
 
   // Nama Pejabat
   doc.setFont('helvetica', 'bold');
@@ -212,10 +216,10 @@ export const generateRaporPDF = (data: RaporData) => {
   doc.text("NIP. -", leftX, signY); 
   doc.text(`NIP. ${data.settings.nipKepala}`, rightX, signY);
 
-  // Footer Halus
+  // Footer
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text(`Dicetak melalui Sistem Rapor-Edyan | ${data.nama}`, 15, 290);
+  doc.text(`Dicetak melalui Rapor-Edyan | ${data.nama} | ${data.kelas}`, 15, 290);
 
   return doc;
 };

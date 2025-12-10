@@ -1,34 +1,84 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Save, School, Calendar, User } from 'lucide-react';
+import { Save, School, Calendar, User, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Settings as SettingsType } from '@/types';
+import api from '@/lib/axios';
+
+// Interface sesuai Backend (Snake Case di DB, Camel Case di Frontend state)
+interface SettingsType {
+  namaSekolah: string;
+  tanggalMulaiPKL: string;
+  tanggalAkhirPKL: string;
+  tahunPelajaran: string;
+  namaKepalaSekolah: string;
+  nipKepalaSekolah: string; // New Field
+}
 
 const SettingsPage = () => {
   const [settings, setSettings] = useState<SettingsType>({
-    namaSekolah: 'SMK Negeri 1 Kota Contoh',
-    tanggalMulaiPKL: '2025-01-06',
-    tanggalAkhirPKL: '2025-06-30',
-    tahunPelajaran: '2024/2025',
-    namaKepalaSekolah: 'Drs. H. Ahmad Sudirman, M.Pd.',
+    namaSekolah: '',
+    tanggalMulaiPKL: '',
+    tanggalAkhirPKL: '',
+    tahunPelajaran: '',
+    namaKepalaSekolah: '',
+    nipKepalaSekolah: '',
   });
 
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // 1. Fetch Settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+        try {
+            const res = await api.get('/settings');
+            if(res.data.success) {
+                const data = res.data.data;
+                // Mapping snake_case DB ke camelCase State
+                setSettings({
+                    namaSekolah: data.nama_sekolah || '',
+                    tahunPelajaran: data.tahun_pelajaran || '',
+                    tanggalMulaiPKL: data.tanggal_mulai_pkl || '',
+                    tanggalAkhirPKL: data.tanggal_akhir_pkl || '',
+                    namaKepalaSekolah: data.nama_kepala_sekolah || '',
+                    nipKepalaSekolah: data.nip_kepala_sekolah || '',
+                });
+            }
+        } catch (error) {
+            toast.error('Gagal memuat pengaturan');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchSettings();
+  }, []);
+
+  // 2. Save Settings
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     
-    // Simulate saving
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    toast.success('Pengaturan berhasil disimpan');
-    setIsSaving(false);
+    try {
+        await api.post('/settings', settings);
+        toast.success('Pengaturan berhasil disimpan');
+    } catch (error) {
+        toast.error('Gagal menyimpan pengaturan');
+    } finally {
+        setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+  }
 
   return (
     <div>
@@ -117,15 +167,27 @@ const SettingsPage = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="space-y-2">
-                <Label htmlFor="namaKepalaSekolah">Nama Kepala Sekolah</Label>
-                <Input
-                  id="namaKepalaSekolah"
-                  value={settings.namaKepalaSekolah}
-                  onChange={(e) => setSettings({ ...settings, namaKepalaSekolah: e.target.value })}
-                  className="border-2"
-                  required
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="namaKepalaSekolah">Nama Kepala Sekolah</Label>
+                    <Input
+                    id="namaKepalaSekolah"
+                    value={settings.namaKepalaSekolah}
+                    onChange={(e) => setSettings({ ...settings, namaKepalaSekolah: e.target.value })}
+                    className="border-2"
+                    required
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="nipKepalaSekolah">NIP Kepala Sekolah</Label>
+                    <Input
+                    id="nipKepalaSekolah"
+                    value={settings.nipKepalaSekolah}
+                    onChange={(e) => setSettings({ ...settings, nipKepalaSekolah: e.target.value })}
+                    className="border-2"
+                    required
+                    />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -139,7 +201,7 @@ const SettingsPage = () => {
           >
             {isSaving ? (
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Menyimpan...
               </div>
             ) : (

@@ -19,6 +19,7 @@ import AbsensiPKL from "./pages/AbsensiPKL";
 import CetakRapor from "./pages/CetakRapor";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import WaliKelas from "./pages/WaliKelas";
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,7 @@ const App = () => (
                 <Route path="/absensi-pkl" element={<AbsensiPKL />} />
                 <Route path="/cetak-rapor" element={<CetakRapor />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/wali-kelas" element={<WaliKelas />} />
               </Route>
             </Route>
 

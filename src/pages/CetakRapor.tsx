@@ -3,6 +3,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import {
   Select,
   SelectContent,
@@ -23,7 +25,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
-import { Printer, Eye, FileText, User, Building2, GraduationCap, Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { Printer, Eye, FileText, User, Building2, GraduationCap, Check, ChevronsUpDown, Loader2, FolderDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateRaporPDF } from '@/utils/pdfUtils';
 import api from '@/lib/axios';
@@ -68,6 +70,8 @@ const CetakRapor = () => {
 
   const [previewData, setPreviewData] = useState<RaporDataComplete | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [isZipping, setIsZipping] = useState(false);
 
   // Settings Sekolah (Bisa dipindah ke database Settings nanti)
   const settings = {
@@ -228,11 +232,101 @@ const CetakRapor = () => {
     toast.success('Rapor berhasil didownload');
   };
 
+  // --- BULK DOWNLOAD LOGIC ---
+  const handleDownloadZip = async () => {
+    if (!selectedKelas) {
+        toast.error('Pilih kelas terlebih dahulu!');
+        return;
+    }
+
+    setIsZipping(true);
+    const toastId = toast.loading('Menyiapkan data rapor sekelas...');
+
+    try {
+        // 1. Ambil Data Lengkap Sekelas dari Backend
+        const res = await api.get(`/rapor/bulk?kelas=${selectedKelas}`);
+        if (!res.data.success) throw new Error('Gagal mengambil data');
+
+        const siswaList = res.data.data;
+        const zip = new JSZip();
+        const folder = zip.folder(`Rapor_PKL_${selectedKelas.replace(/\s+/g, '_')}`);
+
+        // 2. Loop & Generate PDF
+        let count = 0;
+        
+        // Kita pakai Promise.all biar generate-nya paralel (cepat)
+        // Tapi hati-hati memori kalau kelasnya > 100 orang. Untuk 30-40 aman.
+        siswaList.forEach((siswa: any) => {
+            // Mapping data backend ke format PDF Generator
+            const pdfData = {
+                nama: siswa.nama,
+                nisn: siswa.nisn,
+                kelas: siswa.kelas,
+                programKeahlian: siswa.programKeahlian,
+                konsentrasiKeahlian: siswa.konsentrasiKeahlian,
+                tempatPKL: siswa.tempatPKL,
+                instruktur: siswa.instrukturPKL,
+                pembimbing: siswa.pembimbingSekolah,
+                tanggalMulai: settings.tanggalMulai,
+                tanggalAkhir: settings.tanggalAkhir,
+                nilai: siswa.nilai, // Struktur nilai backend sudah sama dgn format PDF
+                catatan: siswa.absensi.catatan,
+                absensi: siswa.absensi,
+                settings: {
+                    sekolah: settings.namaSekolah,
+                    tahunAjaran: settings.tahunPelajaran,
+                    kepalaSekolah: settings.namaKepalaSekolah,
+                    nipKepala: settings.nipKepala,
+                    waliKelas: settings.waliKelas,
+                    tanggalCetak: settings.tanggalCetak,
+                    kota: settings.kota
+                }
+            };
+
+            // Generate PDF Blob
+            const doc = generateRaporPDF(pdfData);
+            const pdfBlob = doc.output('blob');
+            
+            // Masukkan ke ZIP
+            // Nama File: 01_NamaSiswa.pdf (biar urut absen/nama)
+            const namaFile = `${String(count + 1).padStart(2, '0')}_${siswa.nama.replace(/\s+/g, '_')}.pdf`;
+            folder?.file(namaFile, pdfBlob);
+            count++;
+        });
+
+        // 3. Generate File ZIP Akhir
+        toast.loading(`Mengkompres ${count} file PDF...`, { id: toastId });
+        
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `Rapor_PKL_${selectedKelas}.zip`);
+
+        toast.success(`Berhasil mengunduh ${count} rapor!`, { id: toastId });
+
+    } catch (error) {
+        console.error(error);
+        toast.error('Gagal membuat ZIP', { id: toastId });
+    } finally {
+        setIsZipping(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="Cetak Rapor PKL"
         description="Cetak laporan Praktik Kerja Industri dalam format PDF"
+        actions={
+          <div className="flex gap-2">
+             <Button
+                onClick={handleDownloadZip}
+                disabled={!selectedKelas || isZipping}
+                className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all bg-primary text-primary-foreground"
+             >
+                {isZipping ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <FolderDown className="w-4 h-4 mr-2" />}
+                Download ZIP Kelas
+             </Button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
