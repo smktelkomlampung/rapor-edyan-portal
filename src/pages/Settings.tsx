@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Save, School, Calendar, User, Loader2 } from 'lucide-react';
+import { Save, School, Calendar, User, Loader2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/axios';
 
@@ -16,6 +16,8 @@ interface SettingsType {
   tahunPelajaran: string;
   namaKepalaSekolah: string;
   nipKepalaSekolah: string; // New Field
+  kota: string;
+  tanggalRapor: string;
 }
 
 const SettingsPage = () => {
@@ -26,6 +28,8 @@ const SettingsPage = () => {
     tahunPelajaran: '',
     namaKepalaSekolah: '',
     nipKepalaSekolah: '',
+    kota: '',
+    tanggalRapor: '',
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +50,8 @@ const SettingsPage = () => {
                     tanggalAkhirPKL: data.tanggal_akhir_pkl || '',
                     namaKepalaSekolah: data.nama_kepala_sekolah || '',
                     nipKepalaSekolah: data.nip_kepala_sekolah || '',
+                    kota: data.kota || '',
+                    tanggalRapor: data.tanggal_rapor || '',
                 });
             }
         } catch (error) {
@@ -184,6 +190,42 @@ const SettingsPage = () => {
                     id="nipKepalaSekolah"
                     value={settings.nipKepalaSekolah}
                     onChange={(e) => setSettings({ ...settings, nipKepalaSekolah: e.target.value })}
+                    className="border-2"
+                    required
+                    />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Titimangsa (Tempat & Tanggal Rapor) */}
+          <Card className="border-2 border-border shadow-brutal animate-slide-up" style={{ animationDelay: '250ms' }}>
+            <CardHeader className="border-b-2 border-border">
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                Tempat & Tanggal Rapor
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="kota">Kota (Tempat Terbit)</Label>
+                    <Input
+                    id="kota"
+                    value={settings.kota}
+                    onChange={(e) => setSettings({ ...settings, kota: e.target.value })}
+                    className="border-2"
+                    placeholder="Contoh: Pringsewu"
+                    required
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="tanggalRapor">Tanggal Rapor</Label>
+                    <Input
+                    id="tanggalRapor"
+                    type="date"
+                    value={settings.tanggalRapor}
+                    onChange={(e) => setSettings({ ...settings, tanggalRapor: e.target.value })}
                     className="border-2"
                     required
                     />

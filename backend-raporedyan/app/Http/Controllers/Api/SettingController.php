@@ -31,6 +31,8 @@ class SettingController extends Controller
             'tanggal_akhir_pkl' => $request->tanggalAkhirPKL,
             'nama_kepala_sekolah' => $request->namaKepalaSekolah,
             'nip_kepala_sekolah' => $request->nipKepalaSekolah,
+            'kota' => $request->kota,
+            'tanggal_rapor' => $request->tanggalRapor,
         ]);
 
         return response()->json(['success' => true, 'message' => 'Pengaturan berhasil disimpan']);
