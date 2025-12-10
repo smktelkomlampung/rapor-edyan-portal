@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,171 +10,222 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Printer, Eye, FileText, User, Building2, GraduationCap } from 'lucide-react';
+import { 
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList
+} from "@/components/ui/command";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import { Printer, Eye, FileText, User, Building2, GraduationCap, Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateRaporPDF } from '@/utils/pdfUtils';
+import api from '@/lib/axios';
+import { cn } from "@/lib/utils";
 
-interface SiswaRapor {
-  id: string;
-  nama: string;
-  nisn: string;
-  kelas: string;
-  programKeahlian: string;
-  konsentrasiKeahlian: string;
-  tempatPKL: string;
-  instrukturPKL: string;
-  pembimbingSekolah: string;
-  nilaiSkor: number;
-  nilaiDeskripsi: string;
-  nilaiCatatan: string;
-  sakit: number;
-  izin: number;
-  tanpaKeterangan: number;
+// Interface Data Gabungan
+interface RaporDataComplete {
+    siswa: {
+        id: number;
+        nama: string;
+        nisn: string;
+        kelas: string;
+        programKeahlian: string;
+        konsentrasiKeahlian: string;
+    };
+    mapping: {
+        tempat: string;
+        instruktur: string;
+        pembimbing: string;
+    };
+    nilai: {
+        tp: string;
+        skor: number;
+        deskripsi: string;
+    }[];
+    absensi: {
+        sakit: number;
+        izin: number;
+        alpha: number;
+        catatan: string;
+    };
 }
 
-const siswaList: SiswaRapor[] = [
-  {
-    id: '1',
-    nama: 'Ahmad Rizki',
-    nisn: '1234567890',
-    kelas: 'XII RPL 1',
-    programKeahlian: 'Teknik Informatika',
-    konsentrasiKeahlian: 'Rekayasa Perangkat Lunak',
-    tempatPKL: 'PT. Teknologi Nusantara',
-    instrukturPKL: 'Pak Andi Wijaya',
-    pembimbingSekolah: 'Drs. Ahmad Sudirman, M.Pd.',
-    nilaiSkor: 85,
-    nilaiDeskripsi: 'Sangat Baik',
-    nilaiCatatan: 'Menunjukkan keterampilan teknis yang baik dalam pengembangan aplikasi',
-    sakit: 2,
-    izin: 1,
-    tanpaKeterangan: 0,
-  },
-  {
-    id: '2',
-    nama: 'Siti Nurhaliza',
-    nisn: '1234567891',
-    kelas: 'XII RPL 1',
-    programKeahlian: 'Teknik Informatika',
-    konsentrasiKeahlian: 'Rekayasa Perangkat Lunak',
-    tempatPKL: 'CV. Solusi Digital',
-    instrukturPKL: 'Bu Siti Rahayu',
-    pembimbingSekolah: 'Hj. Siti Aminah, S.Pd.',
-    nilaiSkor: 90,
-    nilaiDeskripsi: 'Sangat Baik',
-    nilaiCatatan: 'Komunikasi dan kerjasama tim sangat baik',
-    sakit: 0,
-    izin: 2,
-    tanpaKeterangan: 0,
-  },
-  {
-    id: '3',
-    nama: 'Budi Santoso',
-    nisn: '1234567892',
-    kelas: 'XII RPL 2',
-    programKeahlian: 'Teknik Informatika',
-    konsentrasiKeahlian: 'Rekayasa Perangkat Lunak',
-    tempatPKL: 'PT. Inovasi Teknologi',
-    instrukturPKL: 'Pak Budi Hartono',
-    pembimbingSekolah: 'Ir. Bambang Susilo',
-    nilaiSkor: 78,
-    nilaiDeskripsi: 'Baik',
-    nilaiCatatan: 'Perlu meningkatkan kedisiplinan dan ketepatan waktu',
-    sakit: 1,
-    izin: 0,
-    tanpaKeterangan: 1,
-  },
-];
-
-const tujuanPembelajaran = [
-  'Menerapkan prosedur keselamatan dan kesehatan kerja',
-  'Menganalisis kebutuhan sistem informasi',
-  'Merancang antarmuka pengguna (UI/UX)',
-  'Mengembangkan aplikasi berbasis web',
-  'Mengelola database',
-];
-
-const settings = {
-  namaSekolah: 'SMK Negeri 1 Kota Contoh',
-  tahunPelajaran: '2024/2025',
-  tanggalMulai: '6 Januari 2025',
-  tanggalAkhir: '30 Juni 2025',
-  namaKepalaSekolah: 'Drs. H. Ahmad Sudirman, M.Pd.',
-};
-
 const CetakRapor = () => {
-  const [selectedSiswa, setSelectedSiswa] = useState<string>('');
-  const [previewData, setPreviewData] = useState<SiswaRapor | null>(null);
+  // State
+  const [kelasOptions, setKelasOptions] = useState<string[]>([]);
+  const [selectedKelas, setSelectedKelas] = useState<string>('');
+  
+  const [siswaOptions, setSiswaOptions] = useState<{id: number, nama: string}[]>([]);
+  const [selectedSiswaId, setSelectedSiswaId] = useState<number | null>(null);
+  const [openCombobox, setOpenCombobox] = useState(false);
 
-  const handlePreview = () => {
-    const siswa = siswaList.find((s) => s.id === selectedSiswa);
-    if (siswa) {
-      setPreviewData(siswa);
-    } else {
+  const [previewData, setPreviewData] = useState<RaporDataComplete | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Settings Sekolah (Bisa dipindah ke database Settings nanti)
+  const settings = {
+    namaSekolah: 'SMK TELKOM LAMPUNG',
+    tahunPelajaran: '2024/2025',
+    tanggalMulai: '15 Juli 2024',
+    tanggalAkhir: '13 Desember 2024',
+    namaKepalaSekolah: 'ADANG WIHANDA, S.T.',
+    nipKepala: '-',
+    waliKelas: 'KHAFIDH FEBRIANSYAH, S.Pd.', // Idealnya dari DB
+    kota: 'Pringsewu',
+    tanggalCetak: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  };
+
+  // 1. Load Kelas
+  useEffect(() => {
+    api.get('/siswa').then(res => {
+        if(res.data.success) {
+            const allSiswa = res.data.data;
+            const uniqueKelas = [...new Set(allSiswa.map((s: any) => s.kelas))] as string[];
+            setKelasOptions(uniqueKelas.sort());
+        }
+    });
+  }, []);
+
+  // 2. Load Siswa saat Kelas berubah
+  useEffect(() => {
+    if(selectedKelas) {
+        // Ambil data dari endpoint Nilai (karena disana sudah terstruktur per kelas)
+        // Atau bisa dari endpoint Siswa biasa. Kita pakai endpoint Nilai biar sekalian cek kelengkapan.
+        api.get(`/nilai-pkl?kelas=${selectedKelas}`).then(res => {
+            if(res.data.success) {
+                // Map data siswa untuk dropdown
+                const options = res.data.data.siswa.map((s: any) => ({
+                    id: s.id,
+                    nama: s.nama
+                }));
+                setSiswaOptions(options);
+            }
+        });
+        setSelectedSiswaId(null);
+        setPreviewData(null);
+    }
+  }, [selectedKelas]);
+
+  // 3. Generate Preview Data (Fetch Realtime dari berbagai endpoint)
+  const handlePreview = async () => {
+    if (!selectedSiswaId) {
       toast.error('Pilih siswa terlebih dahulu');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+        // Kita butuh 3 data: Mapping, Nilai, Absensi.
+        // Karena endpoint backend kita terpisah, kita panggil paralel.
+        // (Idealnya backend punya 1 endpoint /rapor/{id} yg menggabungkan ini)
+        
+        // A. Ambil Info Siswa & Nilai
+        const resNilai = await api.get(`/nilai-pkl?kelas=${selectedKelas}`);
+        const dataNilaiRaw = resNilai.data.data;
+        const siswaNilai = dataNilaiRaw.siswa.find((s:any) => s.id === selectedSiswaId);
+        
+        // Format Nilai
+        const nilaiFormatted = dataNilaiRaw.tujuanPembelajaran.map((tp: any) => {
+            const n = siswaNilai.nilai[tp.id] || { skor: 0, deskripsi: '-' };
+            return {
+                tp: tp.nama.replace(/<[^>]*>?/gm, ''), // Hapus tag HTML
+                skor: n.skor,
+                deskripsi: n.deskripsi || '-'
+            };
+        });
+
+        // B. Ambil Mapping
+        const resMapping = await api.get('/mapping');
+        const mappingRaw = resMapping.data.data.mappings.find((m:any) => m.id === selectedSiswaId);
+        // Perlu cari nama text dari ID mapping (karena backend kirim ID)
+        // Ini agak tricky tanpa endpoint khusus detail siswa.
+        // Asumsi: Kita pakai placeholder dulu jika mapping belum ideal di backend, 
+        // ATAU kita perbaiki backend MappingController index untuk kirim object nama juga.
+        // SEMENTARA: Kita ambil dari list option yang dikirim MappingController
+        const tempatList = resMapping.data.data.options.tempat;
+        const instrukturList = resMapping.data.data.options.instruktur;
+        const pembimbingList = resMapping.data.data.options.pembimbing;
+
+        const namaTempat = tempatList.find((t:any) => t.id == mappingRaw.tempatPKLId)?.nama || '-';
+        const namaInstruktur = instrukturList.find((i:any) => i.id == mappingRaw.instrukturPKLId)?.nama || '-';
+        const namaPembimbing = pembimbingList.find((p:any) => p.id == mappingRaw.pembimbingSekolahId)?.nama || '-';
+
+        // C. Ambil Absensi
+        const resAbsen = await api.get(`/absensi?kelas=${selectedKelas}`);
+        const absenRaw = resAbsen.data.data.find((a:any) => a.id === selectedSiswaId);
+
+        // Gabungkan Data
+        const completeData: RaporDataComplete = {
+            siswa: {
+                id: selectedSiswaId,
+                nama: siswaNilai.nama,
+                nisn: siswaNilai.nisn,
+                kelas: selectedKelas,
+                programKeahlian: 'Teknik Jaringan Komputer dan Telekomunikasi', // Hardcoded / Ambil dari DB
+                konsentrasiKeahlian: 'Teknik Komputer dan Jaringan', // Hardcoded / Ambil dari DB
+            },
+            mapping: {
+                tempat: namaTempat,
+                instruktur: namaInstruktur,
+                pembimbing: namaPembimbing
+            },
+            nilai: nilaiFormatted,
+            absensi: {
+                sakit: absenRaw?.sakit || 0,
+                izin: absenRaw?.izin || 0,
+                alpha: absenRaw?.alpha || 0,
+                catatan: absenRaw?.catatan || 'Sudah melakukan kegiatan PKL dengan baik.'
+            }
+        };
+
+        setPreviewData(completeData);
+        toast.success('Data siap dicetak');
+
+    } catch (error) {
+        console.error(error);
+        toast.error('Gagal mengambil data rapor');
+    } finally {
+        setIsLoading(false);
     }
   };
 
   const handlePrint = () => {
-    if (!previewData) {
-      toast.error('Pilih siswa dan preview terlebih dahulu');
-      return;
-    }
+    if (!previewData) return;
 
     const doc = generateRaporPDF({
-      namaSiswa: previewData.nama,
-      nisn: previewData.nisn,
-      kelas: previewData.kelas,
-      programKeahlian: previewData.programKeahlian,
-      konsentrasiKeahlian: previewData.konsentrasiKeahlian,
-      tempatPKL: previewData.tempatPKL,
-      instrukturPKL: previewData.instrukturPKL,
-      pembimbingSekolah: previewData.pembimbingSekolah,
+      nama: previewData.siswa.nama,
+      nisn: previewData.siswa.nisn,
+      kelas: previewData.siswa.kelas,
+      programKeahlian: previewData.siswa.programKeahlian,
+      konsentrasiKeahlian: previewData.siswa.konsentrasiKeahlian,
+      tempatPKL: previewData.mapping.tempat,
+      instruktur: previewData.mapping.instruktur,
+      pembimbing: previewData.mapping.pembimbing,
       tanggalMulai: settings.tanggalMulai,
       tanggalAkhir: settings.tanggalAkhir,
-      nilaiSkor: previewData.nilaiSkor,
-      nilaiDeskripsi: previewData.nilaiDeskripsi,
-      nilaiCatatan: previewData.nilaiCatatan,
-      sakit: previewData.sakit,
-      izin: previewData.izin,
-      tanpaKeterangan: previewData.tanpaKeterangan,
-      namaSekolah: settings.namaSekolah,
-      tahunPelajaran: settings.tahunPelajaran,
-      namaKepalaSekolah: settings.namaKepalaSekolah,
-      tujuanPembelajaran,
+      nilai: previewData.nilai,
+      catatan: previewData.absensi.catatan,
+      absensi: previewData.absensi,
+      settings: {
+        sekolah: settings.namaSekolah,
+        tahunAjaran: settings.tahunPelajaran,
+        kepalaSekolah: settings.namaKepalaSekolah,
+        nipKepala: settings.nipKepala,
+        waliKelas: settings.waliKelas,
+        tanggalCetak: settings.tanggalCetak,
+        kota: settings.kota
+      }
     });
 
-    doc.save(`Rapor_PKL_${previewData.nama.replace(/\s+/g, '_')}.pdf`);
-    toast.success('Rapor berhasil dicetak ke PDF');
-  };
-
-  const handlePrintAll = () => {
-    siswaList.forEach((siswa) => {
-      const doc = generateRaporPDF({
-        namaSiswa: siswa.nama,
-        nisn: siswa.nisn,
-        kelas: siswa.kelas,
-        programKeahlian: siswa.programKeahlian,
-        konsentrasiKeahlian: siswa.konsentrasiKeahlian,
-        tempatPKL: siswa.tempatPKL,
-        instrukturPKL: siswa.instrukturPKL,
-        pembimbingSekolah: siswa.pembimbingSekolah,
-        tanggalMulai: settings.tanggalMulai,
-        tanggalAkhir: settings.tanggalAkhir,
-        nilaiSkor: siswa.nilaiSkor,
-        nilaiDeskripsi: siswa.nilaiDeskripsi,
-        nilaiCatatan: siswa.nilaiCatatan,
-        sakit: siswa.sakit,
-        izin: siswa.izin,
-        tanpaKeterangan: siswa.tanpaKeterangan,
-        namaSekolah: settings.namaSekolah,
-        tahunPelajaran: settings.tahunPelajaran,
-        namaKepalaSekolah: settings.namaKepalaSekolah,
-        tujuanPembelajaran,
-      });
-      doc.save(`Rapor_PKL_${siswa.nama.replace(/\s+/g, '_')}.pdf`);
-    });
-    toast.success(`${siswaList.length} rapor berhasil dicetak`);
+    doc.save(`Rapor_PKL_${previewData.siswa.nama.replace(/\s+/g, '_')}.pdf`);
+    toast.success('Rapor berhasil didownload');
   };
 
   return (
@@ -182,50 +233,91 @@ const CetakRapor = () => {
       <PageHeader
         title="Cetak Rapor PKL"
         description="Cetak laporan Praktik Kerja Industri dalam format PDF"
-        actions={
-          <Button
-            onClick={handlePrintAll}
-            variant="outline"
-            className="border-2 border-foreground shadow-brutal-sm hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
-          >
-            <Printer className="w-4 h-4 mr-2" />
-            Cetak Semua Rapor
-          </Button>
-        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Selection */}
-        <Card className="border-2 border-border shadow-brutal animate-slide-up">
+        {/* Panel Kontrol Kiri */}
+        <Card className="border-2 border-border shadow-brutal animate-slide-up h-fit">
           <CardHeader className="border-b-2 border-border">
             <CardTitle className="flex items-center gap-2">
               <User className="w-5 h-5" />
-              Pilih Siswa
+              Filter & Cetak
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
+            
+            {/* 1. Filter Kelas */}
             <div className="space-y-2">
-              <Label>Nama Siswa</Label>
-              <Select value={selectedSiswa} onValueChange={setSelectedSiswa}>
+              <Label>Pilih Kelas</Label>
+              <Select value={selectedKelas} onValueChange={setSelectedKelas}>
                 <SelectTrigger className="border-2 bg-card">
-                  <SelectValue placeholder="Pilih siswa..." />
+                  <SelectValue placeholder="-- Pilih Kelas --" />
                 </SelectTrigger>
                 <SelectContent className="bg-card border-2 border-border z-50">
-                  {siswaList.map((siswa) => (
-                    <SelectItem key={siswa.id} value={siswa.id}>
-                      {siswa.nama} - {siswa.kelas}
-                    </SelectItem>
+                  {kelasOptions.map((k) => (
+                    <SelectItem key={k} value={k}>{k}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2">
+
+            {/* 2. Cari Siswa (Combobox Searchable) */}
+            <div className="space-y-2">
+              <Label>Cari Siswa</Label>
+              <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openCombobox}
+                    className="w-full justify-between border-2 bg-card"
+                    disabled={!selectedKelas}
+                  >
+                    {selectedSiswaId
+                      ? siswaOptions.find((s) => s.id === selectedSiswaId)?.nama
+                      : "Pilih siswa..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0 border-2">
+                  <Command>
+                    <CommandInput placeholder="Ketik nama siswa..." />
+                    <CommandList>
+                        <CommandEmpty>Siswa tidak ditemukan.</CommandEmpty>
+                        <CommandGroup>
+                        {siswaOptions.map((siswa) => (
+                            <CommandItem
+                            key={siswa.id}
+                            value={siswa.nama}
+                            onSelect={() => {
+                                setSelectedSiswaId(siswa.id);
+                                setOpenCombobox(false);
+                            }}
+                            >
+                            <Check
+                                className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedSiswaId === siswa.id ? "opacity-100" : "opacity-0"
+                                )}
+                            />
+                            {siswa.nama}
+                            </CommandItem>
+                        ))}
+                        </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="flex gap-2 pt-4">
               <Button
                 onClick={handlePreview}
                 variant="outline"
                 className="flex-1 border-2"
+                disabled={!selectedSiswaId || isLoading}
               >
-                <Eye className="w-4 h-4 mr-2" />
+                {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Eye className="w-4 h-4 mr-2" />}
                 Preview
               </Button>
               <Button
@@ -233,107 +325,94 @@ const CetakRapor = () => {
                 className="flex-1 border-2 border-foreground shadow-brutal-sm"
                 disabled={!previewData}
               >
-                <FileText className="w-4 h-4 mr-2" />
+                <Printer className="w-4 h-4 mr-2" />
                 Cetak PDF
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Preview */}
+        {/* Panel Preview Kanan */}
         <div className="lg:col-span-2">
           <Card className="border-2 border-border shadow-brutal animate-slide-up" style={{ animationDelay: '100ms' }}>
-            <CardHeader className="border-b-2 border-border">
+            <CardHeader className="border-b-2 border-border bg-muted/20">
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Preview Rapor
+                Tampilan Rapor
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               {previewData ? (
-                <div className="space-y-6 animate-fade-in">
-                  {/* Header */}
-                  <div className="text-center border-b-2 border-border pb-4">
-                    <h2 className="text-xl font-bold">{settings.namaSekolah}</h2>
-                    <p className="text-lg font-semibold mt-2">LAPORAN PRAKTIK KERJA INDUSTRI (PKL)</p>
+                <div className="space-y-6 animate-fade-in text-sm">
+                  {/* Kop Surat Mini */}
+                  <div className="text-center border-b-2 border-border pb-4 mb-4">
+                    <h2 className="font-bold text-lg">{settings.namaSekolah}</h2>
                     <p className="text-muted-foreground">Tahun Pelajaran: {settings.tahunPelajaran}</p>
                   </div>
 
-                  {/* Student Info */}
+                  {/* Info Siswa */}
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 mb-4">
+                    <div className="grid grid-cols-[100px_1fr]">
+                        <span className="text-muted-foreground">Nama:</span>
+                        <span className="font-bold">{previewData.siswa.nama}</span>
+                    </div>
+                    <div className="grid grid-cols-[100px_1fr]">
+                        <span className="text-muted-foreground">NISN:</span>
+                        <span>{previewData.siswa.nisn}</span>
+                    </div>
+                    <div className="grid grid-cols-[100px_1fr]">
+                        <span className="text-muted-foreground">Kelas:</span>
+                        <span>{previewData.siswa.kelas}</span>
+                    </div>
+                    <div className="grid grid-cols-[100px_1fr]">
+                        <span className="text-muted-foreground">Tempat:</span>
+                        <span className="font-semibold">{previewData.mapping.tempat}</span>
+                    </div>
+                  </div>
+
+                  {/* Tabel Nilai Preview */}
+                  <div className="border-2 border-border rounded-md overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-muted text-xs uppercase">
+                            <tr>
+                                <th className="p-2 border-r border-border text-left">Tujuan Pembelajaran</th>
+                                <th className="p-2 border-r border-border text-center w-16">Skor</th>
+                                <th className="p-2 text-left">Deskripsi</th>
+                            </tr>
+                        </thead>
+                        <tbody className="text-xs">
+                            {previewData.nilai.map((n, i) => (
+                                <tr key={i} className="border-t border-border">
+                                    <td className="p-2 border-r border-border font-medium">{n.tp}</td>
+                                    <td className="p-2 border-r border-border text-center font-bold">{n.skor}</td>
+                                    <td className="p-2 text-muted-foreground">{n.deskripsi}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                  </div>
+
+                  {/* Absensi & Catatan */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-3 p-4 bg-muted border-2 border-border">
-                      <h3 className="font-bold flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Data Siswa
-                      </h3>
-                      <div className="space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Nama:</span> {previewData.nama}</p>
-                        <p><span className="text-muted-foreground">NISN:</span> {previewData.nisn}</p>
-                        <p><span className="text-muted-foreground">Kelas:</span> {previewData.kelas}</p>
-                        <p><span className="text-muted-foreground">Program:</span> {previewData.programKeahlian}</p>
-                        <p><span className="text-muted-foreground">Konsentrasi:</span> {previewData.konsentrasiKeahlian}</p>
-                      </div>
+                    <div className="bg-muted/30 p-3 rounded border border-border">
+                        <h4 className="font-bold mb-2">Ketidakhadiran</h4>
+                        <ul className="space-y-1 text-xs">
+                            <li className="flex justify-between"><span>Sakit:</span> <b>{previewData.absensi.sakit} hari</b></li>
+                            <li className="flex justify-between"><span>Izin:</span> <b>{previewData.absensi.izin} hari</b></li>
+                            <li className="flex justify-between"><span>Alpha:</span> <b>{previewData.absensi.alpha} hari</b></li>
+                        </ul>
                     </div>
-
-                    <div className="space-y-3 p-4 bg-muted border-2 border-border">
-                      <h3 className="font-bold flex items-center gap-2">
-                        <Building2 className="w-4 h-4" />
-                        Informasi PKL
-                      </h3>
-                      <div className="space-y-1 text-sm">
-                        <p><span className="text-muted-foreground">Tempat:</span> {previewData.tempatPKL}</p>
-                        <p><span className="text-muted-foreground">Instruktur:</span> {previewData.instrukturPKL}</p>
-                        <p><span className="text-muted-foreground">Pembimbing:</span> {previewData.pembimbingSekolah}</p>
-                        <p><span className="text-muted-foreground">Periode:</span> {settings.tanggalMulai} - {settings.tanggalAkhir}</p>
-                      </div>
+                    <div className="bg-muted/30 p-3 rounded border border-border">
+                        <h4 className="font-bold mb-2">Catatan</h4>
+                        <p className="text-xs italic text-muted-foreground">"{previewData.absensi.catatan}"</p>
                     </div>
                   </div>
 
-                  {/* Grades */}
-                  <div className="p-4 bg-primary/5 border-2 border-primary">
-                    <h3 className="font-bold flex items-center gap-2 mb-3">
-                      <GraduationCap className="w-4 h-4" />
-                      Penilaian
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <p className="text-3xl font-bold text-primary">{previewData.nilaiSkor}</p>
-                        <p className="text-sm text-muted-foreground">Skor</p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-bold">{previewData.nilaiDeskripsi}</p>
-                        <p className="text-sm text-muted-foreground">Predikat</p>
-                      </div>
-                      <div>
-                        <p className="text-lg">{previewData.sakit + previewData.izin + previewData.tanpaKeterangan}</p>
-                        <p className="text-sm text-muted-foreground">Total Absen</p>
-                      </div>
-                    </div>
-                    <p className="mt-4 text-sm bg-card p-3 border-2 border-border">
-                      <span className="font-semibold">Catatan:</span> {previewData.nilaiCatatan}
-                    </p>
-                  </div>
-
-                  {/* Attendance */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-chart-3/10 border-2 border-chart-3 text-center">
-                      <p className="text-2xl font-bold">{previewData.sakit}</p>
-                      <p className="text-sm">Sakit</p>
-                    </div>
-                    <div className="p-4 bg-primary/10 border-2 border-primary text-center">
-                      <p className="text-2xl font-bold">{previewData.izin}</p>
-                      <p className="text-sm">Izin</p>
-                    </div>
-                    <div className="p-4 bg-destructive/10 border-2 border-destructive text-center">
-                      <p className="text-2xl font-bold">{previewData.tanpaKeterangan}</p>
-                      <p className="text-sm">Tanpa Ket.</p>
-                    </div>
-                  </div>
                 </div>
               ) : (
-                <div className="text-center py-12 text-muted-foreground">
-                  <FileText className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <p>Pilih siswa dan klik Preview untuk melihat rapor</p>
+                <div className="text-center py-12 text-muted-foreground bg-muted/10 border-2 border-dashed border-border rounded-lg">
+                  <GraduationCap className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                  <p>Silahkan filter kelas dan pilih siswa untuk melihat preview.</p>
                 </div>
               )}
             </CardContent>

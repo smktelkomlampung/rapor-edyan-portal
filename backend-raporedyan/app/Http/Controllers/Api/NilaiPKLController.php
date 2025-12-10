@@ -9,6 +9,7 @@ use App\Models\TujuanPembelajaran;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use App\Helpers\DeskripsiHelper;
 
 class NilaiPKLController extends Controller
 {
@@ -339,118 +340,12 @@ class NilaiPKLController extends Controller
         ]);
     }
 
-    // --- OTAK LOKAL (DATABASE KALIMAT) ---
+    // --- OTAK LOKAL (Sekarang Panggil Helper) ---
     private function localGenerator($tpNama, $skor, $namaSiswa)
     {
-        $nama = $namaSiswa ?? 'Peserta didik';
-        $tp = strtolower($tpNama);
-
-        // 1. Tentukan Kategori TP berdasarkan Kata Kunci
-        $kategori = 'umum';
-        if (str_contains($tp, 'soft skills') || str_contains($tp, 'soft skill')) {
-            $kategori = 'soft_skill'; // TP 1
-        } elseif (str_contains($tp, 'k3lh') || str_contains($tp, 'norma') || str_contains($tp, 'pos')) {
-            $kategori = 'k3lh'; // TP 2
-        } elseif (str_contains($tp, 'kompetensi teknis') || str_contains($tp, 'teknis')) {
-            $kategori = 'teknis'; // TP 3
-        } elseif (str_contains($tp, 'bisnis') || str_contains($tp, 'wirausaha')) {
-            $kategori = 'bisnis'; // TP 4
-        }
-
-        // 2. Tentukan Predikat & Template Kalimat
-        // Kita pakai array random biar kalimatnya gak monoton (biar kayak AI beneran)
-        $templates = [];
-
-        if ($skor >= 90) { // SANGAT BAIK
-            switch ($kategori) {
-                case 'soft_skill':
-                    $templates = [
-                        "$nama menunjukkan soft skills yang sangat prima, terutama dalam komunikasi dan kerjasama tim.",
-                        "Sangat konsisten menerapkan kedisiplinan dan etika kerja yang profesional di tempat PKL.",
-                        "$nama sangat adaptif dan memiliki inisiatif tinggi dalam menyelesaikan tugas."
-                    ];
-                    break;
-                case 'k3lh':
-                    $templates = [
-                        "Sangat patuh dan konsisten menerapkan prosedur K3LH serta SOP perusahaan.",
-                        "$nama menjadi teladan dalam penerapan norma keselamatan kerja di lingkungan industri.",
-                        "Pemahaman dan penerapan POS serta K3LH sangat istimewa dan tanpa cela."
-                    ];
-                    break;
-                case 'teknis':
-                    $templates = [
-                        "$nama sangat mahir menguasai kompetensi teknis dan peralatan industri dengan presisi.",
-                        "Kualitas hasil kerja teknis sangat memuaskan dan melampaui standar minimal.",
-                        "Sangat terampil dalam menerapkan ilmu sekolah ke dalam praktik kerja nyata."
-                    ];
-                    break;
-                case 'bisnis':
-                    $templates = [
-                        "Sangat memahami alur bisnis perusahaan dan memiliki wawasan wirausaha yang tajam.",
-                        "$nama mampu menganalisis proses bisnis industri dengan sangat baik.",
-                        "Memiliki potensi wirausaha yang kuat dan pemahaman bisnis yang komprehensif."
-                    ];
-                    break;
-                default: // Umum
-                    $templates = [
-                        "$nama sangat baik dalam menguasai capaian pembelajaran ini.",
-                        "Pencapaian kompetensi sangat memuaskan dan konsisten.",
-                        "Sangat kompeten dalam seluruh aspek materi ini."
-                    ];
-            }
-        } elseif ($skor >= 80) { // BAIK
-            switch ($kategori) {
-                case 'soft_skill':
-                    $templates = [
-                        "$nama memiliki soft skills yang baik dan mampu bekerja sama dengan tim.",
-                        "Sudah menerapkan etika kerja dan kedisiplinan dengan baik.",
-                        "Komunikasi dan adaptasi di lingkungan kerja tergolong baik."
-                    ];
-                    break;
-                case 'k3lh':
-                    $templates = [
-                        "Sudah menerapkan prosedur K3LH dan norma kerja dengan baik.",
-                        "$nama mematuhi POS dan aturan keselamatan kerja dengan disiplin.",
-                        "Penerapan K3LH dalam bekerja sudah berjalan dengan aman dan baik."
-                    ];
-                    break;
-                case 'teknis':
-                    $templates = [
-                        "$nama mampu menerapkan kompetensi teknis sesuai standar industri.",
-                        "Keterampilan teknis berkembang baik dan hasil kerja dapat diandalkan.",
-                        "Baik dalam menggunakan peralatan dan menyelesaikan tugas teknis."
-                    ];
-                    break;
-                case 'bisnis':
-                    $templates = [
-                        "Memahami alur bisnis tempat PKL dengan baik.",
-                        "$nama memiliki wawasan wirausaha yang cukup berkembang.",
-                        "Dapat menjelaskan proses bisnis industri dengan baik."
-                    ];
-                    break;
-                default:
-                    $templates = [
-                        "$nama sudah kompeten dalam materi ini.",
-                        "Hasil capaian pembelajaran tergolong baik.",
-                        "Mampu menerapkan materi dengan baik di tempat kerja."
-                    ];
-            }
-        } elseif ($skor >= 70) { // CUKUP
-            $templates = [
-                "$nama cukup mampu dalam aspek ini namun perlu ditingkatkan lagi.",
-                "Pencapaian kompetensi sudah memenuhi standar minimal.",
-                "Perlu lebih konsisten lagi dalam menerapkan materi ini."
-            ];
-        } else { // KURANG
-            $templates = [
-                "$nama perlu bimbingan intensif untuk menguasai kompetensi ini.",
-                "Belum maksimal dalam menerapkan materi di tempat kerja.",
-                "Perlu peningkatan signifikan dalam kedisiplinan dan pemahaman materi."
-            ];
-        }
-
-        // 3. Pilih Salah Satu Kalimat secara Acak
-        return $templates[array_rand($templates)];
+        // Kita panggil class Helper statis yang baru kita buat
+        // Parameter $namaSiswa tidak kita pakai lagi di Helper agar deskripsi lebih umum/formal
+        return \App\Helpers\DeskripsiHelper::generate($tpNama, $skor);
     }
 
     private function getPredikat($skor)

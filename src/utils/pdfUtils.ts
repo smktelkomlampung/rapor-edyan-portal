@@ -1,153 +1,226 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// --- BAGIAN 1: CETAK RAPOR PDF ---
 interface RaporData {
-  namaSiswa: string;
+  nama: string;
   nisn: string;
   kelas: string;
   programKeahlian: string;
   konsentrasiKeahlian: string;
   tempatPKL: string;
-  instrukturPKL: string;
-  pembimbingSekolah: string;
   tanggalMulai: string;
   tanggalAkhir: string;
-  nilaiSkor: number;
-  nilaiDeskripsi: string;
-  nilaiCatatan: string;
-  sakit: number;
-  izin: number;
-  tanpaKeterangan: number;
-  namaSekolah: string;
-  tahunPelajaran: string;
-  namaKepalaSekolah: string;
-  tujuanPembelajaran: string[];
+  instruktur: string;
+  pembimbing: string;
+  nilai: {
+    tp: string;
+    skor: number;
+    deskripsi: string;
+  }[];
+  catatan: string;
+  absensi: {
+    sakit: number;
+    izin: number;
+    alpha: number;
+  };
+  settings: {
+    sekolah: string;
+    tahunAjaran: string;
+    kepalaSekolah: string;
+    nipKepala: string;
+    waliKelas: string;
+    tanggalCetak: string;
+    kota: string;
+  }
 }
 
 export const generateRaporPDF = (data: RaporData) => {
   const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Header
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text(data.namaSekolah, pageWidth / 2, 20, { align: 'center' });
-  
+
+  // --- 1. HEADER (Dibuat lebih naik ke atas biar hemat tempat) ---
   doc.setFontSize(14);
-  doc.text('LAPORAN PRAKTIK KERJA INDUSTRI (PKL)', pageWidth / 2, 30, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(data.settings.sekolah.toUpperCase(), 105, 15, { align: 'center' }); // Y=15
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Tahun Pelajaran: ${data.tahunPelajaran}`, pageWidth / 2, 38, { align: 'center' });
+  doc.text(`Tahun Ajaran ${data.settings.tahunAjaran}`, 105, 21, { align: 'center' }); // Y=21
+
+  // --- 2. BIODATA (Compact Spacing) ---
+  const startY = 30; // Mulai lebih atas
+  const col1 = 15;
+  const col2 = 55;
   
-  // Line separator
-  doc.setLineWidth(0.5);
-  doc.line(20, 42, pageWidth - 20, 42);
+  doc.setFontSize(9); // Font sedikit diperkecil biar muat
   
-  // Student Info
-  let yPos = 52;
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('DATA SISWA', 20, yPos);
-  yPos += 8;
-  
-  doc.setFont('helvetica', 'normal');
-  const studentInfo = [
-    ['Nama Peserta Didik', data.namaSiswa],
-    ['NISN', data.nisn],
-    ['Kelas', data.kelas],
-    ['Program Keahlian', data.programKeahlian],
-    ['Konsentrasi Keahlian', data.konsentrasiKeahlian],
+  const biodata = [
+    ['Nama Peserta Didik', `: ${data.nama}`],
+    ['NISN', `: ${data.nisn}`],
+    ['Kelas', `: ${data.kelas}`],
+    ['Program Keahlian', `: ${data.programKeahlian}`],
+    ['Konsentrasi Keahlian', `: ${data.konsentrasiKeahlian}`],
+    ['Tempat PKL', `: ${data.tempatPKL}`],
+    ['Tanggal PKL', `: ${data.tanggalMulai} s.d. ${data.tanggalAkhir}`],
+    ['Nama Instruktur', `: ${data.instruktur}`],
+    ['Nama Pembimbing', `: ${data.pembimbing}`],
   ];
-  
-  studentInfo.forEach(([label, value]) => {
-    doc.text(`${label}`, 20, yPos);
-    doc.text(`: ${value}`, 70, yPos);
-    yPos += 6;
+
+  let currentY = startY;
+  biodata.forEach(([label, value]) => {
+    doc.text(label, col1, currentY);
+    // Handle text wrapping jika nama/jurusan kepanjangan
+    const splitValue = doc.splitTextToSize(value, 140);
+    doc.text(splitValue, col2, currentY);
+    currentY += (splitValue.length * 5); // Spasi antar baris lebih rapat (5)
   });
-  
-  // PKL Info
-  yPos += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.text('INFORMASI PKL', 20, yPos);
-  yPos += 8;
-  
-  doc.setFont('helvetica', 'normal');
-  const pklInfo = [
-    ['Tempat PKL', data.tempatPKL],
-    ['Instruktur PKL', data.instrukturPKL],
-    ['Pembimbing Sekolah', data.pembimbingSekolah],
-    ['Periode PKL', `${data.tanggalMulai} s/d ${data.tanggalAkhir}`],
-  ];
-  
-  pklInfo.forEach(([label, value]) => {
-    doc.text(`${label}`, 20, yPos);
-    doc.text(`: ${value}`, 70, yPos);
-    yPos += 6;
+
+  // --- 3. TABEL NILAI (AutoTable) ---
+  const tableData = data.nilai.map(n => [
+    n.tp,
+    n.skor,
+    n.deskripsi
+  ]);
+
+  autoTable(doc, {
+    startY: currentY + 2,
+    head: [['Tujuan Pembelajaran', 'Skor', 'Deskripsi']],
+    body: tableData,
+    theme: 'grid', // Ada garis border
+    headStyles: {
+      fillColor: [255, 255, 255], 
+      textColor: [0, 0, 0],
+      lineWidth: 0.1,
+      lineColor: [0, 0, 0],
+      halign: 'center',
+      valign: 'middle',
+      fontStyle: 'bold',
+      fontSize: 9, // Font header kecil
+      cellPadding: 2
+    },
+    bodyStyles: {
+      textColor: [0, 0, 0],
+      lineWidth: 0.1,
+      lineColor: [0, 0, 0],
+      valign: 'top',
+      fontSize: 9, // Font isi kecil
+      cellPadding: 2
+    },
+    columnStyles: {
+      0: { cellWidth: 60 }, 
+      1: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }, 
+      2: { cellWidth: 'auto' }, 
+    },
   });
+
+  // --- 4. CATATAN (Sekarang pakai Tabel biar ada Border) ---
+  // @ts-ignore
+  let finalY = doc.lastAutoTable.finalY + 5;
+
+  // Kita gunakan autoTable untuk catatan agar otomatis punya border rapi
+  autoTable(doc, {
+    startY: finalY,
+    head: [['Catatan']],
+    body: [[data.catatan || "-"]],
+    theme: 'grid',
+    headStyles: {
+        fillColor: [240, 240, 240], // Abu-abu muda biar beda
+        textColor: [0, 0, 0],
+        lineWidth: 0.1,
+        lineColor: [0, 0, 0],
+        fontStyle: 'bold',
+        fontSize: 9,
+        cellPadding: 2
+    },
+    bodyStyles: {
+        textColor: [0, 0, 0],
+        lineWidth: 0.1,
+        lineColor: [0, 0, 0],
+        fontSize: 9,
+        fontStyle: 'italic',
+        cellPadding: 3
+    }
+  });
+
+  // --- 5. TABEL ABSENSI (Sekarang pakai Grid Border) ---
+  // @ts-ignore
+  finalY = doc.lastAutoTable.finalY + 5;
   
-  // Learning Objectives
-  if (data.tujuanPembelajaran.length > 0) {
-    yPos += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.text('TUJUAN PEMBELAJARAN', 20, yPos);
-    yPos += 8;
-    
-    doc.setFont('helvetica', 'normal');
-    data.tujuanPembelajaran.forEach((tp, index) => {
-      doc.text(`${index + 1}. ${tp}`, 20, yPos);
-      yPos += 6;
-    });
+  autoTable(doc, {
+    startY: finalY,
+    head: [['Ketidakhadiran', 'Jumlah (Hari)']], // Tambah header biar jelas
+    body: [
+      ['Sakit', `${data.absensi.sakit}`],
+      ['Izin', `${data.absensi.izin}`],
+      ['Tanpa Keterangan', `${data.absensi.alpha}`],
+    ],
+    theme: 'grid', // UBAH KE GRID (Ada Border)
+    styles: { 
+        fontSize: 9, 
+        cellPadding: 2,
+        lineWidth: 0.1,
+        lineColor: [0, 0, 0]
+    },
+    headStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        halign: 'left'
+    },
+    columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 30, halign: 'center' }
+    },
+    margin: { left: 15 } // Rata kiri
+  });
+
+  // --- 6. TANDA TANGAN (Posisi Statis di Bawah atau Dinamis) ---
+  // @ts-ignore
+  let signY = doc.lastAutoTable.finalY + 15;
+
+  // Cek sisa halaman, kalau mepet banget (misal < 40mm sisa), baru add page.
+  // Tapi target kita 1 halaman, jadi kita usahakan muat.
+  if (signY > 260) {
+      doc.addPage();
+      signY = 30;
   }
-  
-  // Grades
-  yPos += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.text('PENILAIAN', 20, yPos);
-  yPos += 8;
-  
-  autoTable(doc, {
-    startY: yPos,
-    head: [['Skor', 'Deskripsi', 'Catatan']],
-    body: [[data.nilaiSkor.toString(), data.nilaiDeskripsi, data.nilaiCatatan]],
-    margin: { left: 20, right: 20 },
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [59, 130, 246] },
-  });
-  
-  yPos = (doc as any).lastAutoTable.finalY + 10;
-  
-  // Attendance
-  doc.setFont('helvetica', 'bold');
-  doc.text('KEHADIRAN', 20, yPos);
-  yPos += 8;
-  
-  autoTable(doc, {
-    startY: yPos,
-    head: [['Sakit', 'Izin', 'Tanpa Keterangan', 'Total Ketidakhadiran']],
-    body: [[
-      data.sakit.toString(),
-      data.izin.toString(),
-      data.tanpaKeterangan.toString(),
-      (data.sakit + data.izin + data.tanpaKeterangan).toString()
-    ]],
-    margin: { left: 20, right: 20 },
-    styles: { fontSize: 10 },
-    headStyles: { fillColor: [59, 130, 246] },
-  });
-  
-  yPos = (doc as any).lastAutoTable.finalY + 20;
-  
-  // Signature
-  const signatureY = yPos + 10;
+
+  const leftX = 20;
+  const rightX = 140;
+
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('Mengetahui,', pageWidth - 60, signatureY);
-  doc.text('Kepala Sekolah', pageWidth - 60, signatureY + 6);
-  doc.text(data.namaKepalaSekolah, pageWidth - 60, signatureY + 30);
+
+  // Tanggal & Tempat
+  doc.text(`${data.settings.kota}, ${data.settings.tanggalCetak}`, rightX, signY);
+  signY += 6;
+
+  // Jabatan
+  doc.text("Wali Kelas", leftX, signY);
+  doc.text("Kepala Sekolah", rightX, signY);
+
+  signY += 25; // Ruang tanda tangan
+
+  // Nama Pejabat
+  doc.setFont('helvetica', 'bold');
+  doc.text(data.settings.waliKelas, leftX, signY);
+  doc.text(data.settings.kepalaSekolah, rightX, signY);
   
+  signY += 5;
+  
+  // NIP
+  doc.setFont('helvetica', 'normal');
+  doc.text("NIP. -", leftX, signY); 
+  doc.text(`NIP. ${data.settings.nipKepala}`, rightX, signY);
+
+  // Footer Halus
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text(`Dicetak melalui Sistem Rapor-Edyan | ${data.nama}`, 15, 290);
+
   return doc;
 };
 
+// --- BAGIAN 2: EXPORT TABEL BIASA (Ini yang hilang tadi) ---
 export const exportTableToPDF = <T extends object>(
   data: T[],
   columns: { key: keyof T; header: string }[],

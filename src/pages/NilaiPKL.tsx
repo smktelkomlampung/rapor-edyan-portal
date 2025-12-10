@@ -282,18 +282,37 @@ const NilaiPKLPage = () => {
      return (tmp.textContent || tmp.innerText || "").trim();
   };
 
+  // 5. Excel Logic (Updated: Pre-fill Nama & NISN)
   const handleDownloadTemplate = () => {
-    // Header Dinamis: Nama, NISN, [TP 1], [Deskripsi TP 1], [TP 2], [Deskripsi TP 2]...
-    const dynamicHeaders: string[] = [];
-    tujuanList.forEach(tp => {
-        const cleanName = stripHtml(tp.nama);
-        dynamicHeaders.push(cleanName);            // Kolom Skor
-        dynamicHeaders.push(`Deskripsi: ${cleanName}`); // Kolom Deskripsi
+    // Cek dulu ada data siswa gak?
+    if (siswaData.length === 0) {
+        toast.warning("Pilih kelas terlebih dahulu atau data siswa kosong.");
+        return;
+    }
+
+    // Mapping data siswa ke format Excel
+    const templateData = siswaData.map(s => {
+        const row: any = {
+            'Nama Siswa': s.nama,
+            'NISN': s.nisn, // Ini KUNCI untuk pencocokan di backend
+        };
+
+        // Buat kolom dinamis sesuai Tujuan Pembelajaran
+        tujuanList.forEach(tp => {
+            const cleanName = stripHtml(tp.nama);
+            
+            // Kita set default 0 untuk skor dan string kosong untuk deskripsi
+            // Biar guru tau kolom mana yang harus diisi
+            row[cleanName] = 0; 
+            row[`Deskripsi: ${cleanName}`] = ''; 
+        });
+
+        return row;
     });
 
-    const headers = ['Nama Siswa', 'NISN', ...dynamicHeaders];
-    downloadExcelTemplate(headers, `Template_Nilai_${selectedKelas || 'PKL'}`);
-    toast.success('Template berhasil diunduh');
+    // Gunakan exportToExcel (bukan downloadExcelTemplate) karena kita bawa data baris
+    exportToExcel(templateData, `Template_Input_Nilai_${selectedKelas || 'PKL'}`, 'Input Nilai');
+    toast.success('Template dengan data siswa berhasil diunduh');
   };
 
   const handleImportExcel = () => {

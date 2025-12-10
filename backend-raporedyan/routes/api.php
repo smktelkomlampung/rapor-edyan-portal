@@ -65,4 +65,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/nilai-pkl/import', [App\Http\Controllers\Api\NilaiPKLController::class, 'import']);
 
     Route::post('/nilai-pkl/generate-ai', [App\Http\Controllers\Api\NilaiPKLController::class, 'generateDescription']);
+
+    // Absensi PKL Routes
+    Route::get('/absensi/kelas', [App\Http\Controllers\Api\AbsensiPKLController::class, 'getKelasList']);
+    Route::get('/absensi', [App\Http\Controllers\Api\AbsensiPKLController::class, 'getByKelas']);
+    Route::post('/absensi/save', [App\Http\Controllers\Api\AbsensiPKLController::class, 'storeBulk']);
+    Route::post('/absensi/import', [App\Http\Controllers\Api\AbsensiPKLController::class, 'import']);
 });

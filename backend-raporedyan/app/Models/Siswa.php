@@ -26,4 +26,9 @@ class Siswa extends Model
     {
         return $this->hasMany(NilaiPKL::class, 'siswa_id');
     }
+
+    public function absensi()
+    {
+        return $this->hasOne(AbsensiPKL::class, 'siswa_id');
+    }
 }
