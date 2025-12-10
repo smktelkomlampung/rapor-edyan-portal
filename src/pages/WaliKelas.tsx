@@ -28,7 +28,9 @@ import api from '@/lib/axios';
 interface KelasData {
   id: number;
   nama: string;
+  gelar_depan?: string;
   wali_kelas: string;
+  gelar_belakang?: string;
   nip: string;
 }
 
@@ -39,7 +41,7 @@ interface GuruData {
 
 const WaliKelas = () => {
   const [data, setData] = useState<KelasData[]>([]);
-  const [guruOptions, setGuruOptions] = useState<GuruData[]>([]); // State untuk list guru
+  const [guruOptions, setGuruOptions] = useState<GuruData[]>([]);
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -47,12 +49,19 @@ const WaliKelas = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [openCombobox, setOpenCombobox] = useState(false); // State buka/tutup dropdown
+  const [openCombobox, setOpenCombobox] = useState(false);
 
   const [editingItem, setEditingItem] = useState<KelasData | null>(null);
-  const [formData, setFormData] = useState({ nama: '', wali_kelas: '', nip: '' });
+  // State Form Lengkap
+  const [formData, setFormData] = useState({ 
+      nama: '', 
+      gelar_depan: '', 
+      wali_kelas: '', 
+      gelar_belakang: '', 
+      nip: '' 
+  });
 
-  // 1. Fetch Data Kelas & Guru
+  // 1. Fetch Data
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -67,7 +76,7 @@ const WaliKelas = () => {
 
   const fetchGuru = async () => {
     try {
-        const res = await api.get('/pembimbing-sekolah'); // Ambil dari tabel Pembimbing
+        const res = await api.get('/pembimbing-sekolah');
         if(res.data.success) setGuruOptions(res.data.data);
     } catch (error) {
         console.error("Gagal load guru", error);
@@ -130,10 +139,16 @@ const WaliKelas = () => {
   const handleOpenModal = (item?: KelasData) => {
     if (item) {
         setEditingItem(item);
-        setFormData({ nama: item.nama, wali_kelas: item.wali_kelas, nip: item.nip });
+        setFormData({ 
+            nama: item.nama, 
+            gelar_depan: item.gelar_depan || '', 
+            wali_kelas: item.wali_kelas, 
+            gelar_belakang: item.gelar_belakang || '', 
+            nip: item.nip 
+        });
     } else {
         setEditingItem(null);
-        setFormData({ nama: '', wali_kelas: '', nip: '' });
+        setFormData({ nama: '', gelar_depan: '', wali_kelas: '', gelar_belakang: '', nip: '' });
     }
     setIsModalOpen(true);
   };
@@ -143,9 +158,20 @@ const WaliKelas = () => {
     item.wali_kelas.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Custom Render untuk Nama Lengkap di Tabel
   const columns = [
     { key: 'nama' as const, header: 'Nama Kelas' },
-    { key: 'wali_kelas' as const, header: 'Wali Kelas' },
+    { 
+        key: 'wali_kelas' as const, 
+        header: 'Wali Kelas',
+        render: (item: KelasData) => (
+            <span>
+                {item.gelar_depan ? `${item.gelar_depan} ` : ''}
+                {item.wali_kelas}
+                {item.gelar_belakang ? `, ${item.gelar_belakang}` : ''}
+            </span>
+        )
+    },
     { key: 'nip' as const, header: 'NIP' },
   ];
 
@@ -192,7 +218,7 @@ const WaliKelas = () => {
         <DataTable data={filteredData} columns={columns} onEdit={handleOpenModal} onDelete={handleDelete} />
       )}
 
-      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title={editingItem ? 'Edit Wali Kelas' : 'Tambah Kelas Baru'}>
+      <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title={editingItem ? 'Edit Wali Kelas' : 'Tambah Kelas Baru'} className="max-w-lg">
         <form onSubmit={handleSubmit} className="space-y-4">
             {/* Nama Kelas */}
             <div className="space-y-2">
@@ -206,57 +232,84 @@ const WaliKelas = () => {
                 />
             </div>
 
-            {/* Dropdown Wali Kelas (Searchable) */}
-            <div className="space-y-2">
-                <Label>Nama Wali Kelas (Dari Data Pembimbing)</Label>
-                <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={openCombobox}
-                            className="w-full justify-between border-2 bg-card font-normal"
-                        >
-                            {formData.wali_kelas || "Pilih Wali Kelas..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0 border-2">
-                        <Command>
-                            <CommandInput placeholder="Cari nama guru..." />
-                            <CommandList>
-                                <CommandEmpty>Guru tidak ditemukan.</CommandEmpty>
-                                <CommandGroup>
-                                    {guruOptions.map((guru) => (
-                                        <CommandItem
-                                            key={guru.id}
-                                            value={guru.nama} // Search by Name
-                                            onSelect={() => {
-                                                // Saat dipilih, set nama ke formData
-                                                setFormData({ ...formData, wali_kelas: guru.nama });
-                                                setOpenCombobox(false);
-                                            }}
-                                        >
-                                            <Check
-                                                className={cn(
-                                                    "mr-2 h-4 w-4",
-                                                    formData.wali_kelas === guru.nama ? "opacity-100" : "opacity-0"
-                                                )}
-                                            />
-                                            {guru.nama}
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                            </CommandList>
-                        </Command>
-                    </PopoverContent>
-                </Popover>
-                <p className="text-[10px] text-muted-foreground">
-                    *Data diambil dari menu Pembimbing Sekolah. Jika nama tidak ada, tambahkan dulu di sana.
-                </p>
-            </div>
+            {/* Nama Wali Kelas (Layout Grid 3 Kolom: Gelar Depan - Nama - Gelar Belakang) */}
+            <div className="grid grid-cols-4 gap-2 items-end">
+                <div className="col-span-1 space-y-2">
+                    <Label className="text-xs">Gelar Depan</Label>
+                    <Input 
+                        value={formData.gelar_depan} 
+                        onChange={e => setFormData({...formData, gelar_depan: e.target.value})} 
+                        className="border-2" 
+                        placeholder="Drs."
+                    />
+                </div>
+                
+                <div className="col-span-2 space-y-2">
+                    <Label>Nama Lengkap (Dari Data Pembimbing)</Label>
+                    <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={openCombobox}
+                                className="w-full justify-between border-2 bg-card font-normal"
+                            >
+                                <span className="truncate">
+                                    {formData.wali_kelas || "Pilih Nama..."}
+                                </span>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[300px] p-0 border-2">
+                            <Command>
+                                <CommandInput placeholder="Cari nama guru..." />
+                                <CommandList>
+                                    <CommandEmpty>Guru tidak ditemukan.</CommandEmpty>
+                                    <CommandGroup>
+                                        {guruOptions.map((guru) => (
+                                            <CommandItem
+                                                key={guru.id}
+                                                value={guru.nama}
+                                                onSelect={() => {
+                                                    setFormData({ ...formData, wali_kelas: guru.nama });
+                                                    setOpenCombobox(false);
+                                                }}
+                                            >
+                                                <Check
+                                                    className={cn(
+                                                        "mr-2 h-4 w-4",
+                                                        formData.wali_kelas === guru.nama ? "opacity-100" : "opacity-0"
+                                                    )}
+                                                />
+                                                {guru.nama}
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                </div>
 
-            {/* NIP (Manual Input karena di tabel pembimbing belum ada kolom NIP) */}
+                <div className="col-span-1 space-y-2">
+                    <Label className="text-xs">Gelar Belakang</Label>
+                    <Input 
+                        value={formData.gelar_belakang} 
+                        onChange={e => setFormData({...formData, gelar_belakang: e.target.value})} 
+                        className="border-2" 
+                        placeholder="S.Pd."
+                    />
+                </div>
+            </div>
+            
+            {/* Preview Nama */}
+            {formData.wali_kelas && (
+                <div className="bg-muted p-2 rounded text-xs text-center border">
+                    Preview: <strong>{formData.gelar_depan} {formData.wali_kelas}{formData.gelar_belakang ? `, ${formData.gelar_belakang}` : ''}</strong>
+                </div>
+            )}
+
+            {/* NIP */}
             <div className="space-y-2">
                 <Label>NIP (Opsional)</Label>
                 <Input 

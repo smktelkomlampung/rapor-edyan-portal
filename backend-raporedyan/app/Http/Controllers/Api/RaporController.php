@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Siswa;
 use App\Models\TujuanPembelajaran;
+use App\Models\Kelas;
 use Illuminate\Http\Request;
 
 class RaporController extends Controller
@@ -13,6 +14,21 @@ class RaporController extends Controller
     {
         $kelas = $request->query('kelas');
         if (!$kelas) return response()->json(['success' => false, 'message' => 'Kelas harus dipilih'], 400);
+
+        // [BARU] Ambil Data Wali Kelas dari tabel 'kelas'
+        $dataKelas = Kelas::where('nama', $kelas)->first();
+
+        $waliKelas = '-';
+        $nipWali = '-';
+
+        if ($dataKelas) {
+            // Format Nama Lengkap: [Depan] [Nama], [Belakang]
+            $depan = $dataKelas->gelar_depan ? $dataKelas->gelar_depan . ' ' : '';
+            $belakang = $dataKelas->gelar_belakang ? ', ' . $dataKelas->gelar_belakang : '';
+            $waliKelas = $depan . $dataKelas->wali_kelas . $belakang;
+
+            $nipWali = $dataKelas->nip;
+        }
 
         // Ambil semua TP untuk referensi urutan
         $listTP = TujuanPembelajaran::all();
@@ -30,7 +46,7 @@ class RaporController extends Controller
             ->get();
 
         // Format Data agar siap dilahap Frontend
-        $dataRapor = $siswa->map(function ($s) use ($listTP) {
+        $dataRapor = $siswa->map(function ($s) use ($listTP, $waliKelas, $nipWali) {
 
             // 1. Format Nilai (Gabungkan dengan List TP biar urut)
             $nilaiFormatted = $listTP->map(function ($tp) use ($s) {
@@ -55,7 +71,9 @@ class RaporController extends Controller
                 'tempatPKL' => $s->mapping && $s->mapping->tempatPkl ? $s->mapping->tempatPkl->nama : '-',
                 'instrukturPKL' => $s->mapping && $s->mapping->instrukturPkl ? $s->mapping->instrukturPkl->nama : '-',
                 'pembimbingSekolah' => $s->mapping && $s->mapping->pembimbingSekolah ? $s->mapping->pembimbingSekolah->nama : '-',
-
+                // [BARU] Data Wali Kelas Dynamic
+                'waliKelas' => $waliKelas,
+                'nipWali' => $nipWali,
                 // Data Nilai Lengkap
                 'nilai' => $nilaiFormatted,
 
