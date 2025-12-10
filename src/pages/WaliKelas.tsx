@@ -6,10 +6,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, RefreshCw, Filter, Loader2 } from 'lucide-react';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Plus, Search, RefreshCw, Filter, Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from "@/lib/utils";
 import api from '@/lib/axios';
 
+// Interface Data
 interface KelasData {
   id: number;
   nama: string;
@@ -17,18 +32,27 @@ interface KelasData {
   nip: string;
 }
 
+interface GuruData {
+  id: number;
+  nama: string;
+}
+
 const WaliKelas = () => {
   const [data, setData] = useState<KelasData[]>([]);
+  const [guruOptions, setGuruOptions] = useState<GuruData[]>([]); // State untuk list guru
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [openCombobox, setOpenCombobox] = useState(false); // State buka/tutup dropdown
+
   const [editingItem, setEditingItem] = useState<KelasData | null>(null);
   const [formData, setFormData] = useState({ nama: '', wali_kelas: '', nip: '' });
 
-  // Fetch Data
+  // 1. Fetch Data Kelas & Guru
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -41,8 +65,18 @@ const WaliKelas = () => {
     }
   };
 
+  const fetchGuru = async () => {
+    try {
+        const res = await api.get('/pembimbing-sekolah'); // Ambil dari tabel Pembimbing
+        if(res.data.success) setGuruOptions(res.data.data);
+    } catch (error) {
+        console.error("Gagal load guru", error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchGuru();
   }, []);
 
   // Sync Logic
@@ -160,18 +194,79 @@ const WaliKelas = () => {
 
       <FormModal open={isModalOpen} onOpenChange={setIsModalOpen} title={editingItem ? 'Edit Wali Kelas' : 'Tambah Kelas Baru'}>
         <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Nama Kelas */}
             <div className="space-y-2">
                 <Label>Nama Kelas</Label>
-                <Input value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="border-2" required placeholder="Contoh: XII RPL 1"/>
+                <Input 
+                    value={formData.nama} 
+                    onChange={e => setFormData({...formData, nama: e.target.value})} 
+                    className="border-2" 
+                    required 
+                    placeholder="Contoh: XII RPL 1"
+                />
             </div>
+
+            {/* Dropdown Wali Kelas (Searchable) */}
             <div className="space-y-2">
-                <Label>Nama Wali Kelas</Label>
-                <Input value={formData.wali_kelas} onChange={e => setFormData({...formData, wali_kelas: e.target.value})} className="border-2" required />
+                <Label>Nama Wali Kelas (Dari Data Pembimbing)</Label>
+                <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openCombobox}
+                            className="w-full justify-between border-2 bg-card font-normal"
+                        >
+                            {formData.wali_kelas || "Pilih Wali Kelas..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0 border-2">
+                        <Command>
+                            <CommandInput placeholder="Cari nama guru..." />
+                            <CommandList>
+                                <CommandEmpty>Guru tidak ditemukan.</CommandEmpty>
+                                <CommandGroup>
+                                    {guruOptions.map((guru) => (
+                                        <CommandItem
+                                            key={guru.id}
+                                            value={guru.nama} // Search by Name
+                                            onSelect={() => {
+                                                // Saat dipilih, set nama ke formData
+                                                setFormData({ ...formData, wali_kelas: guru.nama });
+                                                setOpenCombobox(false);
+                                            }}
+                                        >
+                                            <Check
+                                                className={cn(
+                                                    "mr-2 h-4 w-4",
+                                                    formData.wali_kelas === guru.nama ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            {guru.nama}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+                <p className="text-[10px] text-muted-foreground">
+                    *Data diambil dari menu Pembimbing Sekolah. Jika nama tidak ada, tambahkan dulu di sana.
+                </p>
             </div>
+
+            {/* NIP (Manual Input karena di tabel pembimbing belum ada kolom NIP) */}
             <div className="space-y-2">
                 <Label>NIP (Opsional)</Label>
-                <Input value={formData.nip} onChange={e => setFormData({...formData, nip: e.target.value})} className="border-2" placeholder="-" />
+                <Input 
+                    value={formData.nip} 
+                    onChange={e => setFormData({...formData, nip: e.target.value})} 
+                    className="border-2" 
+                    placeholder="-" 
+                />
             </div>
+
             <div className="flex gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="flex-1 border-2">Batal</Button>
                 <Button type="submit" disabled={isSaving} className="flex-1 border-2 border-foreground shadow-brutal-sm">Simpan</Button>
